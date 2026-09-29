@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    background-color: #f8fafc;
+  }
+}
+
+.font-amiri {
+  font-family: 'Amiri', serif;
+}
+
+/* Custom styles for rendered curriculum markdown content */
+.curriculum-prose h3 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+.curriculum-prose h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0369a1;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.curriculum-prose p {
+  margin-bottom: 0.75rem;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.curriculum-prose ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  color: #334155;
+}
+
+.curriculum-prose ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  color: #334155;
+}
+
+.curriculum-prose li {
+  margin-bottom: 0.35rem;
+  line-height: 1.6;
+}
+
+.curriculum-prose strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.curriculum-prose em {
+  color: #475569;
+}
+
+.curriculum-prose hr {
+  margin: 1.75rem 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.curriculum-prose blockquote {
+  border-left: 4px solid #0ea5e9;
+  padding-left: 1rem;
+  font-style: italic;
+  color: #475569;
+  margin: 1rem 0;
+  background-color: #f0f9ff;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+/* Table styling for Rubrik Penilaian */
+.curriculum-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  background: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.curriculum-prose th {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #cbd5e1;
+}
+
+.curriculum-prose td {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: top;
+}
+
+.curriculum-prose tr:nth-child(even) td {
+  background-color: #f8fafc;
+}
+
+/* High-fidelity Print Rules for Official Lesson Plans */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .page-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .curriculum-prose table {
+    page-break-inside: avoid !important;
+    border: 1px solid #000 !important;
+  }
+
+  .curriculum-prose th,
+  .curriculum-prose td {
+    border: 1px solid #444 !important;
+  }
+}

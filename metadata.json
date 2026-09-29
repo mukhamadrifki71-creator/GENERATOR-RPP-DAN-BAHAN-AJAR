@@ -1,0 +1,6 @@
+{
+  "name": "EduCraft AI - Generator RPP Mendalam & Bahan Ajar PAI",
+  "description": "Penyusun otomatis Rencana Pelaksanaan Pembelajaran (RPP) Mendalam dan Bahan Ajar PAI & BP siap ajar berbasis data master_atp_pai Supabase dan Kurikulum Nasional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
