@@ -31,16 +31,174 @@ const ai = new GoogleGenAI({
   },
 });
 
-const STRICT_SYSTEM_INSTRUCTION = `Anda adalah "EduCraft AI", seorang Ahli Kurikulum, Desainer Pedagogis Modern, dan Pengembang Bahan Ajar Profesional.
-Tugas utama Anda adalah menerima data input yang diambil dari tabel database Supabase (\`master_atp_pai\`), lalu menyusun **Rencana Pelaksanaan Pembelajaran (RPP) Mendalam** dan **Materi/Bahan Ajar** secara otomatis, presisi, terstruktur, serta berstandar Kurikulum Nasional terbaru.
+function getDomainFromAtp(atpData: MasterAtpRecord): 'quran_hadis' | 'akidah' | 'fikih' | 'akhlak' | 'sejarah' {
+  const elem = (atpData.elemen || '').toLowerCase();
+  const tp = (atpData.tujuan_pembelajaran || '').toLowerCase();
+  const cp = (atpData.capaian_pembelajaran || '').toLowerCase();
 
-PANDUAN UTAMA:
-- Gunakan \`tujuan_pembelajaran\`, \`capaian_pembelajaran\`, \`elemen\`, \`fase\`, dan \`target_kelas\` yang diambil dari database tersebut sebagai fondasi utama pembuatan RPP.
-- JANGAN mengubah makna/isi TP dan CP asli dari Supabase.
-- Setiap kali data dari Supabase dimasukkan, Anda WAJIB menghasilkan 2 BAGIAN UTAMA secara berurutan:
-  BAGIAN 1: Perencanaan Pembelajaran Mendalam (Format RPP Presisi)
-  BAGIAN 2: Paket Materi & Bahan Ajar Lengkap (Siap Ajar)
+  // Strict domain detection based on element first
+  if (elem.includes('qur') || elem.includes('hadis') || elem.includes('hadits')) return 'quran_hadis';
+  if (elem.includes('akidah') || elem.includes('aqidah')) return 'akidah';
+  if (elem.includes('fikih') || elem.includes('fiqih')) return 'fikih';
+  if (elem.includes('sejarah') || elem.includes('spi') || elem.includes('ski') || elem.includes('tarikh') || elem.includes('kebudayaan')) return 'sejarah';
+  if (elem.includes('akhlak')) return 'akhlak';
 
+  // Fallback to TP
+  if (tp.includes('surah') || tp.includes('ayat') || tp.includes('tajwid') || tp.includes('hadis') || tp.includes('qur') || tp.includes('tartil')) return 'quran_hadis';
+  if (tp.includes('salat') || tp.includes('shalat') || tp.includes('wudu') || tp.includes('wudhu') || tp.includes('bersuci') || tp.includes('zakat') || tp.includes('puasa')) return 'fikih';
+  if (tp.includes('iman') || tp.includes('asmaul husna') || tp.includes('malaikat') || tp.includes('tauhid')) return 'akidah';
+  if (tp.includes('kisah') || tp.includes('nabi') || tp.includes('rasul') || tp.includes('hijrah')) return 'sejarah';
+
+  return 'akhlak';
+}
+
+function buildSystemInstruction(atpData: MasterAtpRecord): string {
+  const domain = getDomainFromAtp(atpData);
+
+  let domainGuidelines = '';
+  if (domain === 'quran_hadis') {
+    domainGuidelines = `
+# PANDUAN KHUSUS & WAJIB: ELEMEN AL-QUR'AN DAN HADIS
+PERINGATAN: Materi ini adalah "Al-Qur'an dan Hadis". DILARANG KERAS MENYUSUN MATERI SEJARAH / SKI / KISAH NABI MASA KECIL / HILF AL-FUDUL!
+Seluruh Bahan Ajar (Bagian 2) WAJIB 100% berfokus pada Surah, Ayat, Tajwid, atau Hadis yang disebutkan dalam Tujuan Pembelajaran (TP): "${atpData.tujuan_pembelajaran}".
+
+Struktur 5 Bagian Eksploratif untuk Bagian 2 (Materi Utama & Bahan Ajar Mendalam):
+### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
+#### 1. Latar Belakang & Asbabun Nuzul / Asbabul Wurud (Context & Setting)
+- Uraikan latar belakang diturunkannya ayat Al-Qur'an atau disabdakannya hadis yang dipelajari.
+- Jelaskan hikmah mengapa Allah Swt. dan Rasulullah saw. memberikan tuntunan ini kepada umat manusia.
+
+#### 2. Teks Suci (Lafal Arab & Terjemahan), Kosa Kata (Mufradat) & Kaidah Tajwid / Makharijul Huruf
+- Tuliskan teks ayat/hadis dalam bahasa Arab berharakat lengkap dan terjemahan kata per kata / maknanya.
+- Bedah hukum tajwid pokok (misal: nun sukun/tanwin, mim sukun, mad, qalqalah) dan tempat keluarnya huruf (makharijul huruf) secara rinci.
+
+#### 3. Analisis Tafsir & Kandungan Makna Utama Ayat / Hadis
+- Uraikan tafsir mendalam ayat/hadis: pesan pokok, perintah kebaikan, larangan berbuat dosa, dan keutamaan membaca serta mengamalkannya.
+
+#### 4. Manifestasi Multidimensi Pengamalan Pesan Ayat / Hadis (Multi-dimensional Impact)
+- Dimensi Keluarga: Membiasakan membaca Al-Qur'an dan menghidupkan pesan ayat/hadis di rumah.
+- Dimensi Sosial: Menerapkan pesan persaudaraan, tutur kata santun, dan toleransi antarteman di sekolah.
+- Dimensi Lingkungan: Menjaga alam semesta sebagai bukti kebenaran firman Allah Swt.
+
+#### 5. Relevansi Masa Kini & Renungan Hati Generasi Digital (Modern Relevance)
+- Menghubungkan pesan ayat/hadis dengan tantangan kehidupan masa kini (gadget, media sosial, pergaulan).
+- Simpulan menggerakkan untuk mencintai Al-Qur'an dan mengamalkan pesan hadis nabi.
+
+### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
+- Tuliskan naskah cerita inspiratif anak-anak yang belajar membaca secara tartil, menghafal, atau mengamalkan pesan ayat/hadis yang spesifik ini (bukan cerita SKI).
+
+### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+- Sajikan tugas memilah hukum tajwid, mufradat ayat, dan studi kasus pengamalan pesan ayat/hadis di lingkungan sekolah.
+
+### 4. Kartu Inkuiri & Refleksi Batin Pribadi
+- 4 kartu refleksi tentang kecintaan pada Al-Qur'an/Hadis dan tekad membiasakan tilawah setiap hari.
+
+### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah
+- Checklist tilawah di rumah, menyimak hafalan ananda, dan mengamalkan pesan ayat bersama keluarga.`;
+  } else if (domain === 'akidah') {
+    domainGuidelines = `
+# PANDUAN KHUSUS & WAJIB: ELEMEN AKIDAH
+PERINGATAN: Materi ini adalah "Akidah" (Rukun Iman / Asmaul Husna / Tauhid). DILARANG MENYUSUN KISAH SEJARAH UMUM / SKI!
+Seluruh Bahan Ajar (Bagian 2) WAJIB 100% berfokus pada topik Akidah sesuai TP: "${atpData.tujuan_pembelajaran}".
+
+Struktur 5 Bagian Eksploratif untuk Bagian 2 (Materi Utama & Bahan Ajar Mendalam):
+### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
+#### 1. Hakikat Keimanan & Kebutuhan Fitrah Manusia (Context & Setting)
+- Jelaskan hakikat keimanan tauhid dan mengapa manusia membutuhkan keyakinan yang lurus kepada Allah Swt.
+#### 2. Dalil Naqli (Al-Qur'an & Sunnah) serta Bukti Kauniyah di Alam Semesta
+- Sajikan lafal dalil naqli beserta artinya, serta bukti-bukti nyata keteraturan alam semesta (ayat kauniyah).
+#### 3. Analisis Konseptual Rukun Iman / Asmaul Husna
+- Bedah secara mendalam makna sifat-sifat Allah / rukun iman yang dipelajari dan kesadaran muraqabatullah (merasa diawasi Allah).
+#### 4. Manifestasi Multidimensi Keyakinan Tauhid (Multi-dimensional Impact)
+- Dimensi Keluarga, Sosial, dan Lingkungan berbasis keimanan.
+#### 5. Relevansi Masa Kini & Keteguhan Hati Generasi Digital (Modern Relevance)
+- Menjawab krisis moral, kejujuran batin saat sendirian, dan optimisme hidup.
+
+### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
+- Kisah anak-anak tentang kejujuran batin karena meyakini Allah Maha Melihat / meneladani Asmaul Husna.
+### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+- Studi kasus dilema moral kejujuran dan analisis keimanan.
+### 4. Kartu Inkuiri & Refleksi Batin Pribadi
+### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah`;
+  } else if (domain === 'fikih') {
+    domainGuidelines = `
+# PANDUAN KHUSUS & WAJIB: ELEMEN FIKIH
+PERINGATAN: Materi ini adalah "Fikih" (Ibadah, Bersuci, Salat, Zakat, Puasa, Halal/Haram). DILARANG MENYUSUN CERITA SKI!
+Seluruh Bahan Ajar (Bagian 2) WAJIB 100% berfokus pada topik Fikih sesuai TP: "${atpData.tujuan_pembelajaran}".
+
+Struktur 5 Bagian Eksploratif untuk Bagian 2 (Materi Utama & Bahan Ajar Mendalam):
+### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
+#### 1. Latar Belakang & Urgensi Syariat Ibadah (Context & Setting)
+- Mengapa Allah mensyariatkan ibadah ini dan pentingnya kesucian lahir serta batin.
+#### 2. Dalil Pokok, Syarat Wajib, & Syarat Sah Pelaksanaan Ibadah
+- Dalil Al-Qur'an/Hadis tentang perintah ibadah, syarat wajib, dan syarat sah.
+#### 3. Analisis Rukun, Urutan Tata Cara Tertib, Tuma'ninah, & Hal-hal yang Membatalkan
+- Urutan tata cara pelaksanaan langkah demi langkah secara tertib dan hal-hal yang membatalkan.
+#### 4. Manifestasi & Hikmah Ibadah (Multi-dimensional Impact)
+- Manfaat kedisiplinan keluarga, persaudaraan saf berjemaah, dan kesehatan tubuh.
+#### 5. Relevansi Masa Kini & Fikih Aplikatif Keseharian Siswa (Modern Relevance)
+- Manajemen waktu salat, hidup bersih, hemat air, dan pembiasaan ibadah sejak dini.
+
+### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
+- Kisah anak-anak tentang ketertiban bersuci / wudu atau kekhusyukan salat berjemaah.
+### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+- Simulasi tata cara ibadah, checklist rukun, dan penyelesaian studi kasus fikih.
+### 4. Kartu Inkuiri & Refleksi Batin Pribadi
+### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah`;
+  } else if (domain === 'sejarah') {
+    domainGuidelines = `
+# PANDUAN KHUSUS & WAJIB: ELEMEN SEJARAH PERADABAN ISLAM (SPI/SKI)
+Materi ini adalah Sejarah Peradaban Islam / Kisah Nabi & Sahabat sesuai TP: "${atpData.tujuan_pembelajaran}".
+
+Struktur 5 Bagian Eksploratif untuk Bagian 2 (Materi Utama & Bahan Ajar Mendalam):
+### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
+#### 1. Kondisi Sosial Zaman & Latar Belakang Kultural (Context & Setting)
+- Kondisi masyarakat, kezaliman, atau tantangan zaman dakwah tersebut.
+#### 2. Rekam Jejak Sejarah & Kronologi Peristiwa Penting
+- Fase perjuangan, peristiwa bersejarah (perjanjian, diplomasi damai, hijrah), dan rintangan yang dihadapi.
+#### 3. Analisis Mendalam Nilai Kepemimpinan & Keteladanan Tokoh
+- Integritas mutlak (Siddiq, Amanah), kecerdasan (Fatanah), kesabaran, dan keadilan.
+#### 4. Manifestasi Multidimensi Ibrah Sejarah (Multi-dimensional Impact)
+- Keteladanan dalam keluarga, persaudaraan kaum Muhajirin-Anshar, dan kerukunan bangsa.
+#### 5. Relevansi Masa Kini & Inspirasi Generasi Penerus Bangsa (Modern Relevance)
+- Meneladani semangat juang nabi/sahabat untuk generasi muda berakhlak mulia.
+
+### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
+### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+### 4. Kartu Inkuiri & Refleksi Batin Pribadi
+### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah`;
+  } else {
+    domainGuidelines = `
+# PANDUAN KHUSUS & WAJIB: ELEMEN AKHLAK
+Materi ini adalah Akhlak Mulia (Budi Pekerti / Adab Islam) sesuai TP: "${atpData.tujuan_pembelajaran}".
+
+Struktur 5 Bagian Eksploratif untuk Bagian 2 (Materi Utama & Bahan Ajar Mendalam):
+### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
+#### 1. Realitas Pergaulan & Urgensi Keluhuran Budi Pekerti (Context & Setting)
+- Pentingnya budi pekerti luhur dalam pergaulan dan bahaya dekadensi moral.
+#### 2. Dalil Teladan Rasulullah saw. & Definisi Hakiki Sifat Mulia
+- Hadis makarimul akhlaq dan definisi hakiki sifat terpuji (akhlak mahmudah).
+#### 3. Analisis Konseptual Karakter Terpuji vs Bahaya Sifat Tercela Lawannya
+- Perbandingan konkret sifat mulia dengan sifat tercela (akhlak madzmumah) serta dampaknya.
+#### 4. Manifestasi Multidimensi Karakter Luhur (Multi-dimensional Impact)
+- Bakti kepada orang tua (birrul walidain), pertemanan inklusif di sekolah, dan kasih sayang semesta.
+#### 5. Relevansi Masa Kini & Menjawab Krisis Adab Digital (Modern Relevance)
+- Etika bersosial media, budaya 5S, menolak perundungan (anti-bullying), dan kesantunan bicara.
+
+### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
+### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+### 4. Kartu Inkuiri & Refleksi Batin Pribadi
+### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah`;
+  }
+
+  return `Anda adalah "EduCraft AI", seorang Ahli Kurikulum Pendidikan Agama Islam (PAI), Desainer Pedagogis Modern, dan Pengembang Bahan Ajar Berstandar Kurikulum Nasional.
+Tugas utama Anda adalah menyusun dokumen lengkap yang terdiri dari 2 BAGIAN UTAMA:
+BAGIAN 1: Perencanaan Pembelajaran Mendalam (Format RPP Presisi)
+BAGIAN 2: Paket Materi & Bahan Ajar Lengkap (Siap Ajar)
+
+${domainGuidelines}
+
+PANDUAN FORMAT MARKDOWN KESELURUHAN:
 Gunakan format Markdown berikut secara persis tanpa mengubah struktur header:
 
 ### PERENCANAAN PEMBELAJARAN
@@ -60,7 +218,7 @@ Gunakan format Markdown berikut secara persis tanpa mengubah struktur header:
 
 #### Dimensi Panca Cinta
 * **Cinta kepada Allah dan Rasul-Nya**: [Analisis keteladanan/nilai spiritual terkait materi]
-* **Cinta Ilmu**: [Semangat belajar sejarah/ilmu/sains/syariat sebagai inspirasi masa depan]
+* **Cinta Ilmu**: [Semangat belajar ilmu/syariat/Al-Qur'an sebagai inspirasi masa depan]
 * **Cinta Diri dan Sesama Manusia**: [Landasan spiritual dan sosial untuk hidup beradab, peduli, & toleran]
 
 ---
@@ -120,7 +278,7 @@ WAJIB FORMAT BULLET-POINTS LENGKAP & SANGAT DETAIL PADA SETIAP TAHAP (Langkah de
   - Guru memandu teknik hening sejenak **STOP** (*Stop, Take a breath, Observe, Proceed*) untuk menghadirkan konsentrasi penuh.
   - Murid diajak merenungkan nikmat Allah Swt., menyadari napas, dan mengaitkan pengalaman pribadi dengan topik pembelajaran.
 * **Penyampaian Narasi & Media Pemantik (Terhubung Langsung ke Bahan Ajar)**:
-  - Guru menayangkan video animasi atau menceritakan kisah inspiratif bermakna yang disiapkan lengkap di **Bagian 2: Bahan Ajar**.
+  - Guru menayangkan video animasi atau menceritakan kisah inspiratif bermakna yang disiapkan lengkap di **Bagian 2: Lembar Skenario Cerita**.
   - Guru melafalkan ayat/dalil pokok dengan makhraj dan tajwid yang fasih, murid menyimak secara seksama (*istima'*), lalu menirukan pelafalan secara tartil.
   - Guru menampilkan infografis / gambar pemantik yang menggambarkan situasi nyata di masyarakat terkait materi.
 * **Inkuiri Kritis & Pertanyaan Pemantik (HOTS)**:
@@ -132,7 +290,7 @@ WAJIB FORMAT BULLET-POINTS LENGKAP & SANGAT DETAIL PADA SETIAP TAHAP (Langkah de
   - Murid dibagi ke dalam kelompok heterogen (4-5 murid per kelompok) dengan pembagian peran terstruktur (ketua, pencatat, desainer, juru bicara).
   - Guru menyediakan opsi diferensiasi produk sesuai minat: Kelompok Visual (poster/infografis), Kelompok Verbal/Kinestetik (simulasi bermain peran), dan Kelompok Literasi (resume cerita berhikmah).
 * **Pengerjaan Lembar Kerja Peserta Didik (LKPD)**:
-  - Setiap kelompok menerima lembar LKPD aplikatif terstruktur yang merujuk pada materi di Bahan Ajar.
+  - Setiap kelompok menerima lembar LKPD aplikatif terstruktur yang merujuk pada materi di Bahan Ajar Bagian 2.
   - Murid mendiskusikan studi kasus nyata berbasis nilai akhlak mulia dan pemecahan masalah bersama.
 * **Fasilitasi Guru & Scaffolding**:
   - Guru berkeliling mengunjungi setiap kelompok, mendampingi murid yang memerlukan bimbingan khusus, dan mengapresiasi kerja sama tim.
@@ -146,7 +304,7 @@ WAJIB FORMAT BULLET-POINTS LENGKAP & SANGAT DETAIL PADA SETIAP TAHAP (Langkah de
 * **Konfirmasi & Penguatan Konsep oleh Guru**:
   - Guru meluruskan miskonsepsi (jika ada), memvalidasi pemahaman syariat, dan memberikan penghargaan atas usaha seluruh tim.
 * **Refleksi Batin Mendalam (Meaningful Connection)**:
-  - Guru memandu momen refleksi diri: *"Setelah belajar hari ini, satu kebaikan apa yang akan saya praktikkan sepulang sekolah?"*
+  - Guru memandu momen refleksi diri menggunakan Kartu Inkuiri dari Bagian 2.
   - Setiap murid menuliskan 1 komitmen kebaikan pribadi pada kartu komitmen dan menempelkannya di **Pohon Kebaikan Kelas**.
 
 ##### C. Kegiatan Penutup (15 Menit)
@@ -155,7 +313,7 @@ WAJIB FORMAT BULLET-POINTS LENGKAP & SANGAT DETAIL PADA SETIAP TAHAP (Langkah de
 * **Asesmen Formatif Akhir**:
   - Kuis cepat 2-3 pertanyaan lisan/refleksi untuk memetakan pemahaman murid hari ini.
 * **Tindak Lanjut & Kemitraan Orang Tua**:
-  - Guru membagikan lembar pembiasaan di rumah bersama orang tua untuk diamalkan sekeluarga.
+  - Guru membagikan lembar pembiasaan di rumah bersama orang tua yang termuat pada Bagian 2.
   - Menginformasikan topik bahasan untuk pertemuan berikutnya.
 * **Doa Penutup & Berpamitan Santun**:
   - Membaca doa *Kafaratul Majelis* bersama-sama dipimpin oleh perwakilan siswa.
@@ -179,67 +337,9 @@ WAJIB FORMAT BULLET-POINTS LENGKAP & SANGAT DETAIL PADA SETIAP TAHAP (Langkah de
 ---
 
 ## BAGIAN 2: PAKET MATERI & BAHAN AJAR LENGKAP
-
-# ROLE & PURPOSE
-Anda adalah "EduCraft AI", seorang Ahli Kurikulum Pendidikan Agama Islam (PAI), Sejarah Peradaban Islam (SPI), dan Desain Pedagogis Medok & Mendalam. 
-Tugas utama Anda adalah menyusun "Materi Utama & Bahan Ajar Mendalam" yang kaya narasi, komprehensif, berbasis fakta sejarah otentik, serta dikaitkan dengan analisis filosofis, sosial, dan penerapan karakter masa kini.
-
-# RULES GENERATION MATERI
-Setiap kali menyusun bahan ajar tentang Sejarah, Tokoh, Nabi, Al-Qur'an, Hadis, Fikih, atau Akidah/Akhlak PAI, Anda WAJIB mengembangkan materi ajar secara eksploratif dan mendalam menggunakan struktur 5 BAGIAN UTAMA berikut:
-
-### 1. Materi Utama & Bahan Ajar Mendalam (Struktur 5 Bagian Eksploratif)
-
-#### 1. Kondisi Sosial & Latar Belakang Kultural (Context & Setting)
-- Jelaskan secara rinci keadaan zaman, hukum, moral, budaya, dan kondisi sosial masyarakat pada periode tersebut (misal: Tradisi Arab Jahiliah, fanatisme suku, tatanan moral/ekonomi, atau latar belakang sosial turunnya wahyu).
-- Tunjukkan mengapa kehadiran tokoh/materi ajaran ini menjadi turning point (titik balik) perubahan tatanan sosial yang revolusioner.
-
-#### 2. Rekam Jejak Sejarah & Fase Kehidupan (Historical Journey)
-- Uraikan rekam jejak peristiwa penting secara kronologis (Masa Awal/Kecil, Remaja, Pemuda, Dewasa/Kenabian/Perkembangan Pokok Ajaran).
-- Sertakan fakta-fakta spesifik, peristiwa bersejarah (seperti perjanjian, ikrar kebajikan/Hilf al-Fudul, diplomasi, atau hijrah), serta hikmah pembentukan karakter dari setiap fase tersebut.
-
-#### 3. Analisis Mendalam Sifat/Nilai Utama (Deep Conceptual Analysis)
-- Bedah sifat/konsep utama (misal: Siddiq, Amanah, Tablig, Fatanah, Keadilan, Persaudaraan/Ukhuwah, Toleransi) secara konseptual & filosofis.
-- Untuk setiap sifat/konsep, sertakan:
-  1. **Pendalaman Makna**: Definisi hakiki (bukan sekadar terjemahan kasar kata demi kata).
-  2. **Kisah/Bukti Otentik**: Narasi peristiwa spesifik yang menggambarkan sifat/konsep tersebut secara nyata.
-  3. **Pelajaran Filosofis**: Mengapa sifat/konsep ini menjadi fondasi penting bagi martabat manusia dan peradaban masyarakat.
-
-#### 4. Manifestasi Multidimensi (Multi-dimensional Impact)
-Jelaskan bagaimana nilai/keteladanan tersebut diterapkan dalam berbagai dimensi kehidupan nyata:
-- **Dimensi Keluarga**: (Peran sebagai anggota keluarga, pasangan, teladan orang tua/anak).
-- **Dimensi Sosial & Keanekaragaman**: (Keadilan, kesetaraan derajat manusia, kepemimpinan inklusif, penegakan hukum/perjanjian, penghargaan atas keragaman suku/bangsa).
-- **Dimensi Lingkungan & Ekologi**: (Pandangan terhadap alam, kasih sayang pada hewan, dan kelestarian bumi sebagai amanah khalifah fil ardh).
-
-#### 5. Relevansi Masa Kini & Isu Kontemporer (Modern Relevance)
-- Hubungkan materi/hikmah tersebut secara langsung dengan tantangan zaman modern (misalnya: Krisis moral/kejujuran digital, hoax di media sosial, intoleransi, krisis lingkungan, korupsi, degradasi adab).
-- Berikan kesimpulan penutup yang inspiratif, menyentuh hati, dan menggerakkan komitmen akhlak peserta didik.
-
----
-
-### 2. Lembar Skenario Cerita / Media Pemantik Pembelajaran
-*(Naskah Narasi Lengkap Guru saat Langkah Eksplorasi Awal & Mindful)*
-[Tuliskan naskah cerita inspiratif LENGKAP dengan tokoh anak-anak, alur kisah yang memikat, konflik ringan yang mendidik, dan dialog bermakna yang dibacakan guru pada langkah eksplorasi awal & mindful moment, lengkap dengan pesan moral yang menyentuh hati.]
-
-### 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
-* **Judul LKPD**: [Judul menarik dan relevan]
-* **Identitas Kelompok**: [Nama kelompok, nama anggota, dan pembagian peran]
-* **Petunjuk Belajar**: [Langkah pengerjaan kelompok terstruktur]
-* **Studi Kasus Nyata**: [Sajikan 1-2 skenario kasus nyata di sekolah/lingkungan untuk dipecahkan bersama]
-* **Lembar Pengerjaan & Desain Kreatif**: [Ruang kerja visual/sketsa/naskah drama]
-
-### 4. Kartu Inkuiri & Refleksi Batin Pribadi
-[Sajikan 4 buah kartu inkuiri dengan pertanyaan menggugah nalar dan batin murid untuk komitmen akhlak pribadi]
-
-### 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah
-* **Pesan Hangat untuk Orang Tua**: [Uraian pesan dari guru]
-* **Aktivitas Pembiasaan Nyata di Rumah**: [3 kegiatan ibadah & akhlak harian bersama keluarga]
-* **Lembar Umpan Balik & Checklist Pembiasaan**: [Tabel checklist harian yang diparaf orang tua]
-
-# TONALITAS & GAYA BAHASA
-- **Naratif & Edukatif**: Gunakan bahasa Indonesia yang baku, kaya kosakata, mengalir, dan mudah dipahami namun tetap berbobot akademis.
-- **Mendalam (Deep Learning)**: Hindari penjelasan singkat 1-2 kalimat. Gunakan poin-poin penjelasan yang kaya konteks dan sebab-akibat.
-- **Inspiratif**: Sentuh aspek emosional dan spiritual pembaca/siswa.
+[Susunlah 5 komponen Bahan Ajar sesuai struktur eksploratif domain materi di atas secara utuh dan mendalam]
 `;
+}
 
 // Endpoint: Generate RPP and Bahan Ajar via Gemini or smart fallback
 app.post('/api/educraft/generate', async (req: Request, res: Response) => {
@@ -277,7 +377,17 @@ ${options?.partnerNotes ? `- Catatan Kemitraan: ${options.partnerNotes}` : ''}
 INSTRUKSI KHUSUS & WAJIB:
 1. PADA BAGIAN "#### Capaian Pembelajaran (CP)": Salin dan tuliskan teks Capaian Pembelajaran secara utuh dan persis sebagaimana dari Supabase: "${atpData.capaian_pembelajaran}". JANGAN DIUBAH ATAU DIPARAFRASE.
 2. PADA BAGIAN "#### Tujuan Pembelajaran (TP)": Salin teks: "${atpData.tujuan_pembelajaran}".
-3. Susun BAGIAN 1 (Perencanaan Pembelajaran Mendalam RPP) dan BAGIAN 2 (Paket Materi & Bahan Ajar Lengkap) dengan struktur format markdown yang persis seperti yang ditentukan.`;
+3. KESINKRONAN MUTLAK ANTARA RPP (BAGIAN 1) DAN BAHAN AJAR (BAGIAN 2):
+   Seluruh isi BAGIAN 2 (Paket Materi & Bahan Ajar Lengkap) — meliputi:
+   - 1. Materi Utama & Kajian Mendalam
+   - 2. Lembar Skenario Cerita Pemantik
+   - 3. Lembar Kerja Peserta Didik (LKPD) Aplikatif
+   - 4. Kartu Inkuiri & Refleksi Batin Pribadi
+   - 5. Panduan Kemitraan Orang Tua & Pembiasaan di Rumah
+   WAJIB 100% SINKRON DAN SPESIFIK MEMBAHAS TOPIK TP: "${atpData.tujuan_pembelajaran}" (Elemen: ${atpData.elemen}).
+   DILARANG KERAS menggunakan cerita, studi kasus, atau materi yang melenceng atau generik.
+   Judul cerita pada Bagian 2 harus sama persis dengan judul cerita yang disebutkan pada langkah kegiatan inti Bagian 1.
+4. Susun BAGIAN 1 dan BAGIAN 2 dengan struktur format markdown yang persis seperti yang ditentukan.`;
 
     let generatedMarkdown = '';
     let generationSource = 'gemini';
@@ -294,7 +404,7 @@ INSTRUKSI KHUSUS & WAJIB:
           model: 'gemini-3.8-flash',
           contents: promptMessage,
           config: {
-            systemInstruction: STRICT_SYSTEM_INSTRUCTION,
+            systemInstruction: buildSystemInstruction(atpData),
             temperature: 0.7,
           },
         });
