@@ -108,11 +108,23 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  // Supabase live integration state
+  // Supabase live integration state (persisted across page reloads and browser sessions)
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(() => {
-    return !!localStorage.getItem('educraft_cached_catalog');
+    return !!(localStorage.getItem('educraft_sb_key') || localStorage.getItem('educraft_cached_catalog'));
   });
   const [supabaseError, setSupabaseError] = useState<string>('');
+
+  const handleDisconnectSupabase = () => {
+    localStorage.removeItem('educraft_sb_url');
+    localStorage.removeItem('educraft_sb_key');
+    localStorage.removeItem('educraft_sb_table');
+    localStorage.removeItem('educraft_sb_cp_table');
+    localStorage.removeItem('educraft_cached_catalog');
+    setCatalogItems(MASTER_ATP_PAI_CATALOG);
+    setCurrentAtp(DEFAULT_INITIAL_ATP);
+    setIsSupabaseConnected(false);
+    setSupabaseError('');
+  };
 
   // Signatory State (Teacher and Principal information)
   const [isSignatoryOpen, setIsSignatoryOpen] = useState<boolean>(false);
@@ -582,6 +594,7 @@ export default function App() {
               setCatalogItems={setCatalogItems}
               isSupabaseConnected={isSupabaseConnected}
               onRefreshSupabase={handleRefreshSupabase}
+              onDisconnectSupabase={handleDisconnectSupabase}
               supabaseError={supabaseError}
             />
 

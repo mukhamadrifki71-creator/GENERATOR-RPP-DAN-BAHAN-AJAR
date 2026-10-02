@@ -10,6 +10,11 @@ import {
   Sparkles,
   Settings,
   HelpCircle,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Trash2,
+  Lock,
 } from 'lucide-react';
 
 interface AtpInputStationProps {
@@ -23,6 +28,7 @@ interface AtpInputStationProps {
   setCatalogItems: React.Dispatch<React.SetStateAction<MasterAtpRecord[]>>;
   isSupabaseConnected: boolean;
   onRefreshSupabase: (url: string, key: string, table: string, cpTable?: string) => Promise<boolean>;
+  onDisconnectSupabase?: () => void;
   supabaseError: string;
 }
 
@@ -37,6 +43,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
   setCatalogItems,
   isSupabaseConnected,
   onRefreshSupabase,
+  onDisconnectSupabase,
   supabaseError,
 }) => {
   // Only 2 simple modes: 'catalog' (from Supabase) and 'json' (quick paste)
@@ -47,22 +54,50 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
   const [filterFase, setFilterFase] = useState<string>('all');
   const [filterElemen, setFilterElemen] = useState<string>('all');
 
-  // Supabase credentials state
-  const [showConfig, setShowConfig] = useState<boolean>(!isSupabaseConnected);
+  // Supabase credentials state - loaded directly from persistent localStorage
+  const [showConfig, setShowConfig] = useState<boolean>(() => {
+    // Keep config hidden if credentials already exist
+    const hasKey = !!localStorage.getItem('educraft_sb_key');
+    const hasCached = !!localStorage.getItem('educraft_cached_catalog');
+    return !(hasKey || hasCached);
+  });
   const [sbUrl, setSbUrl] = useState<string>(() => localStorage.getItem('educraft_sb_url') || '');
   const [sbKey, setSbKey] = useState<string>(() => localStorage.getItem('educraft_sb_key') || '');
   const [sbTable, setSbTable] = useState<string>(() => localStorage.getItem('educraft_sb_table') || 'master_atp_pai');
   const [sbCpTable, setSbCpTable] = useState<string>(() => localStorage.getItem('educraft_sb_cp_table') || 'master_cp_pai');
   const [sbLoading, setSbLoading] = useState<boolean>(false);
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [showKey, setShowKey] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
 
-  // Auto-connect if credentials exist in localStorage on mount
-  useEffect(() => {
-    if (sbUrl && sbKey && !isSupabaseConnected) {
-      handleSync();
-    }
-  }, []);
+  // Update and immediately persist credentials to localStorage
+  const handleUrlChange = (val: string) => {
+    let clean = val.trim();
+    const m = clean.match(/supabase\.com\/dashboard\/project\/([a-zA-Z0-9_-]+)/i);
+    if (m && m[1]) clean = `https://${m[1]}.supabase.co`;
+    clean = clean.replace(/\/rest\/v1.*$/i, '');
+    setSbUrl(clean);
+    localStorage.setItem('educraft_sb_url', clean);
+  };
+
+  const handleKeyChange = (val: string) => {
+    const clean = val.trim().replace(/^['"]|['"]$/g, '');
+    setSbKey(clean);
+    localStorage.setItem('educraft_sb_key', clean);
+  };
+
+  const handleTableChange = (val: string) => {
+    const clean = val.trim();
+    setSbTable(clean);
+    localStorage.setItem('educraft_sb_table', clean);
+  };
+
+  const handleCpTableChange = (val: string) => {
+    const clean = val.trim();
+    setSbCpTable(clean);
+    localStorage.setItem('educraft_sb_cp_table', clean);
+  };
 
   const handleSync = async () => {
     if (!sbUrl.trim() || !sbKey.trim()) {
@@ -70,6 +105,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
       return;
     }
     setSbLoading(true);
+    setSaveSuccessMsg('');
     const success = await onRefreshSupabase(
       sbUrl.trim(),
       sbKey.trim(),
@@ -79,6 +115,21 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
     setSbLoading(false);
     if (success) {
       setShowConfig(false);
+      setSaveSuccessMsg('✓ Data dan Kunci Supabase berhasil disimpan permanen!');
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+    }
+  };
+
+  const handleDisconnect = () => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus kunci Supabase yang tersimpan dari browser ini?')) {
+      setSbUrl('');
+      setSbKey('');
+      setSbTable('master_atp_pai');
+      setSbCpTable('master_cp_pai');
+      if (onDisconnectSupabase) {
+        onDisconnectSupabase();
+      }
+      setShowConfig(true);
     }
   };
 
@@ -138,18 +189,41 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
       <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <h2 className="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
               <Database className="w-4 h-4 text-teal-700" />
               <span>Katalog ATP PAI (Data Supabase)</span>
               {isSupabaseConnected ? (
-                <span className="text-[11px] font-semibold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Terhubung ke Supabase ({catalogItems.length} Materi)</span>
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Terhubung ({catalogItems.length} Materi)</span>
+                  </span>
+                  <span className="text-[10px] text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1" title="Kunci tersimpan permanen di browser ini">
+                    <ShieldCheck className="w-3 h-3 text-teal-600" />
+                    <span>Kunci Tersimpan Permanen</span>
+                  </span>
+                  <button
+                    onClick={handleSync}
+                    disabled={sbLoading}
+                    className="text-[10px] font-medium text-teal-800 hover:text-teal-900 bg-white border border-teal-200 hover:bg-teal-50 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                    title="Tarik data terbaru dari Supabase tanpa perlu mengisi ulang kunci"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${sbLoading ? 'animate-spin text-teal-600' : ''}`} />
+                    <span>{sbLoading ? 'Menyinkronkan...' : 'Sinkron Ulang'}</span>
+                  </button>
+                </div>
               ) : (
-                <span className="text-[11px] font-medium text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded-full">
-                  Menggunakan Data Katalog
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-amber-800 bg-amber-100/70 border border-amber-200 px-2 py-0.5 rounded-full">
+                    Katalog Standar (84 Data)
+                  </span>
+                  <button
+                    onClick={() => setShowConfig(true)}
+                    className="text-[10px] font-semibold text-teal-800 hover:underline cursor-pointer"
+                  >
+                    + Hubungkan Supabase
+                  </button>
+                </div>
               )}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -184,10 +258,13 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
 
             <button
               onClick={() => setShowConfig(!showConfig)}
-              className="p-1.5 text-xs text-slate-600 hover:text-teal-800 bg-white border border-slate-200 rounded-lg shadow-2xs hover:bg-slate-50 transition-colors"
-              title="Pengaturan Koneksi Supabase"
+              className="p-1.5 text-xs text-slate-600 hover:text-teal-800 bg-white border border-slate-200 rounded-lg shadow-2xs hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
+              title={showConfig ? 'Tutup Pengaturan' : 'Pengaturan Koneksi Supabase'}
             >
               <Settings className="w-4 h-4" />
+              <span className="text-[11px] font-medium hidden sm:inline">
+                {isSupabaseConnected ? 'Kunci Tersimpan' : 'Atur Kunci'}
+              </span>
             </button>
           </div>
         </div>
@@ -199,15 +276,38 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <Database className="w-3.5 h-3.5 text-teal-700" />
                 <span>Koneksi Supabase Anda:</span>
+                <span className="text-[10px] font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Otomatis Tersimpan Permanen</span>
+                </span>
               </span>
-              <button
-                onClick={() => setShowHelp(!showHelp)}
-                className="text-[11px] text-teal-700 hover:underline flex items-center gap-1"
-              >
-                <HelpCircle className="w-3 h-3" />
-                <span>{showHelp ? 'Tutup Petunjuk' : 'Di mana cari URL & Key?'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {sbKey && (
+                  <button
+                    onClick={handleDisconnect}
+                    className="text-[11px] text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    title="Hapus kunci tersimpan dari browser"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Hapus Kunci</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowHelp(!showHelp)}
+                  className="text-[11px] text-teal-700 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  <span>{showHelp ? 'Tutup Petunjuk' : 'Di mana cari URL & Key?'}</span>
+                </button>
+              </div>
             </div>
+
+            {saveSuccessMsg && (
+              <div className="mb-2.5 p-2 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{saveSuccessMsg}</span>
+              </div>
+            )}
 
             {showHelp && (
               <div className="mb-3 p-2.5 bg-teal-50 border border-teal-200 rounded text-[11px] text-slate-700 space-y-1">
@@ -227,28 +327,38 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                   type="text"
                   placeholder="https://xyz.supabase.co"
                   value={sbUrl}
-                  onChange={(e) => {
-                    let val = e.target.value.trim();
-                    const m = val.match(/supabase\.com\/dashboard\/project\/([a-zA-Z0-9_-]+)/i);
-                    if (m && m[1]) val = `https://${m[1]}.supabase.co`;
-                    val = val.replace(/\/rest\/v1.*$/i, '');
-                    setSbUrl(val);
-                  }}
+                  onChange={(e) => handleUrlChange(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-teal-600"
                 />
               </div>
 
               <div className="sm:col-span-3">
-                <label className="text-[10px] text-slate-500 font-semibold mb-0.5 block">
-                  API Key (Anon / Service Role):
-                </label>
-                <input
-                  type="password"
-                  placeholder="eyJhbGciOi..."
-                  value={sbKey}
-                  onChange={(e) => setSbKey(e.target.value.trim())}
-                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
-                />
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-[10px] text-slate-500 font-semibold block">
+                    API Key (Anon / Public):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="text-[10px] text-slate-500 hover:text-teal-700 flex items-center gap-0.5 cursor-pointer"
+                    title={showKey ? 'Sembunyikan kunci' : 'Tampilkan kunci'}
+                  >
+                    {showKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    <span>{showKey ? 'Tutup' : 'Lihat'}</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    placeholder="eyJhbGciOi..."
+                    value={sbKey}
+                    onChange={(e) => handleKeyChange(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-teal-600 pr-7"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Lock className="w-3 h-3" />
+                  </div>
+                </div>
               </div>
 
               <div className="sm:col-span-2">
@@ -259,7 +369,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                   type="text"
                   placeholder="master_atp_pai"
                   value={sbTable}
-                  onChange={(e) => setSbTable(e.target.value.trim())}
+                  onChange={(e) => handleTableChange(e.target.value)}
                   className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
                   title="Nama tabel Tujuan Pembelajaran (ATP) di Supabase"
                 />
@@ -273,9 +383,9 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                   type="text"
                   placeholder="master_cp_pai"
                   value={sbCpTable}
-                  onChange={(e) => setSbCpTable(e.target.value.trim())}
+                  onChange={(e) => handleCpTableChange(e.target.value)}
                   className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
-                  title="Nama tabel Capaian Pembelajaran jika berada di tabel terpisah (misal: master_cp_pai atau cp_pai)"
+                  title="Nama tabel Capaian Pembelajaran jika berada di tabel terpisah"
                 />
               </div>
 
@@ -283,13 +393,28 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                 <button
                   onClick={handleSync}
                   disabled={sbLoading}
-                  className="w-full px-2 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 disabled:bg-slate-400 rounded-md transition-colors flex items-center justify-center gap-1 whitespace-nowrap shadow-2xs h-[30px]"
+                  className="w-full px-2 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 disabled:bg-slate-400 rounded-md transition-colors flex items-center justify-center gap-1 whitespace-nowrap shadow-2xs h-[30px] cursor-pointer"
                   title="Tarik data ATP dan Capaian Pembelajaran dari Supabase"
                 >
                   {sbLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                   <span>{sbLoading ? '...' : 'Tarik'}</span>
                 </button>
               </div>
+            </div>
+
+            <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] text-slate-500">
+              <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Kunci Anda tersimpan permanen di browser ini. Anda tidak perlu memasukkannya lagi saat membuka aplikasi berikutnya.</span>
+              </span>
+              {isSupabaseConnected && (
+                <button
+                  onClick={() => setShowConfig(false)}
+                  className="text-slate-600 hover:text-slate-900 underline font-semibold self-end sm:self-auto cursor-pointer"
+                >
+                  Tutup Panel
+                </button>
+              )}
             </div>
 
             <p className="mt-2 text-[10px] text-slate-500 leading-relaxed">
