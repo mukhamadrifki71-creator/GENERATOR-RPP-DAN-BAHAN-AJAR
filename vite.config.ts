@@ -5,8 +5,8 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    // Ubah base dari './' menjadi nama repositori GitHub Anda
-    base: '/GENERATOR-RPP-DAN-BAHAN-AJAR/',
+    // Relative base './' works universally on GitHub Pages (any repo name) and local dev
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

@@ -153,68 +153,168 @@ export default function App() {
     try {
       let data: any = null;
 
-      // 1. Try server-side proxy route first (when running with backend)
-      try {
-        const res = await fetch('/api/supabase/fetch-atp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            supabaseUrl: url,
-            supabaseAnonKey: key,
-            tableName: table,
-            cpTableName: cpTable,
-            limit: 1000,
-          }),
-        });
+      // Clean inputs thoroughly
+      let rawUrl = (url || '').trim().replace(/^['"]|['"]$/g, '');
+      const cleanKey = (key || '').trim().replace(/^['"]|['"]$/g, '').replace(/[\r\n\t\s]/g, '');
 
-        if (res.ok) {
-          data = await res.json();
-        }
-      } catch {
-        // Backend not available (e.g. GitHub Pages static hosting), will fall back to direct browser fetch
+      if (!rawUrl || !cleanKey) {
+        throw new Error('URL Supabase dan API Key (Anon) wajib diisi.');
       }
 
-      // 2. Fallback to direct client-side Supabase REST call (works 100% on GitHub Pages via CORS)
-      if (!data || !data.data) {
-        let rawUrl = (url || '').trim();
-        const m = rawUrl.match(/supabase\.com\/dashboard\/project\/([a-zA-Z0-9_-]+)/i);
-        if (m && m[1]) rawUrl = `https://${m[1]}.supabase.co`;
+      // Auto-detect dashboard URL vs API URL
+      const dashMatch = rawUrl.match(/supabase\.com\/dashboard\/project\/([a-zA-Z0-9_-]+)/i);
+      if (dashMatch && dashMatch[1]) {
+        rawUrl = `https://${dashMatch[1]}.supabase.co`;
+      } else if (/^[a-zA-Z0-9_-]{15,35}$/.test(rawUrl)) {
+        rawUrl = `https://${rawUrl}.supabase.co`;
+      } else {
         rawUrl = rawUrl.replace(/\/rest\/v1.*$/i, '').replace(/\/+$/, '');
         if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
           rawUrl = 'https://' + rawUrl;
         }
+      }
 
-        const cleanTable = table.replace(/^public\./i, '').replace(/^\/+|\/+$/g, '') || 'master_atp_pai';
-        const cleanCpTable = cpTable.replace(/^public\./i, '').replace(/^\/+|\/+$/g, '') || 'master_cp_pai';
+      let cleanTable = table.replace(/^public\./i, '').replace(/^\/+|\/+$/g, '').trim() || 'master_atp_pai';
+      let cleanCpTable = (cpTable || '').replace(/^public\./i, '').replace(/^\/+|\/+$/g, '').trim() || 'master_cp_pai';
 
+      const isStaticHost =
+        typeof window !== 'undefined' &&
+        (window.location.hostname.includes('github.io') ||
+          (window.location.hostname === 'localhost' && window.location.port !== '3000'));
+
+      // 1. Try server-side proxy route first ONLY when running on Node.js full-stack server
+      if (!isStaticHost) {
+        try {
+          const res = await fetch('/api/supabase/fetch-atp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              supabaseUrl: rawUrl,
+              supabaseAnonKey: cleanKey,
+              tableName: cleanTable,
+              cpTableName: cleanCpTable,
+              limit: 1000,
+            }),
+          });
+
+          if (res.ok) {
+            data = await res.json();
+          }
+        } catch {
+          // Fall back to direct browser fetch
+        }
+      }
+
+      // 2. Direct client-side Supabase REST call (runs directly from user's browser via CORS)
+      if (!data || !data.data) {
         const authHeaders = {
-          apikey: key.trim(),
-          Authorization: `Bearer ${key.trim()}`,
+          apikey: cleanKey,
+          Authorization: `Bearer ${cleanKey}`,
           'Content-Type': 'application/json',
+          Accept: 'application/json',
         };
 
-        const directRes = await fetch(`${rawUrl}/rest/v1/${cleanTable}?select=*&limit=1000`, {
-          method: 'GET',
-          headers: authHeaders,
-        });
-
-        if (!directRes.ok) {
-          const errText = await directRes.text();
-          throw new Error(`Koneksi Supabase gagal (${directRes.status}): ${errText}`);
-        }
-
-        const rows = await directRes.json();
-        let cpRows: any[] = [];
+        // 2a. Discover tables via OpenAPI spec to detect correct table name automatically
+        let discoveredTables: string[] = [];
         try {
-          const cpRes = await fetch(`${rawUrl}/rest/v1/${cleanCpTable}?select=*&limit=500`, {
+          const metaRes = await fetch(`${rawUrl}/rest/v1/`, {
             method: 'GET',
             headers: authHeaders,
           });
-          if (cpRes.ok) {
-            cpRows = await cpRes.json();
+          if (metaRes.ok) {
+            const spec: any = await metaRes.json();
+            if (spec?.definitions) {
+              discoveredTables = Object.keys(spec.definitions);
+            } else if (spec?.paths) {
+              discoveredTables = Object.keys(spec.paths)
+                .map((p: string) => p.replace(/^\//, ''))
+                .filter((p: string) => p && !p.includes('/'));
+            }
           }
         } catch {
-          // CP table optional
+          // discovery optional
+        }
+
+        // Auto-match ATP table name if user's input doesn't match exactly
+        if (discoveredTables.length > 0) {
+          const exactMatch = discoveredTables.find((t) => t.toLowerCase() === cleanTable.toLowerCase());
+          if (exactMatch) {
+            cleanTable = exactMatch;
+          } else {
+            const atpCandidate = discoveredTables.find((t) => t.toLowerCase().includes('atp'));
+            if (atpCandidate) cleanTable = atpCandidate;
+          }
+
+          const cpExact = discoveredTables.find((t) => t.toLowerCase() === cleanCpTable.toLowerCase());
+          if (cpExact) {
+            cleanCpTable = cpExact;
+          } else {
+            const cpCandidate = discoveredTables.find(
+              (t) =>
+                (t.toLowerCase().includes('cp') || t.toLowerCase().includes('capaian')) &&
+                t.toLowerCase() !== cleanTable.toLowerCase()
+            );
+            if (cpCandidate) cleanCpTable = cpCandidate;
+          }
+        }
+
+        // 2b. Query primary ATP table directly
+        let directRes: Response;
+        try {
+          directRes = await fetch(`${rawUrl}/rest/v1/${cleanTable}?select=*&limit=1000`, {
+            method: 'GET',
+            headers: authHeaders,
+          });
+        } catch (networkErr: any) {
+          throw new Error(
+            `Koneksi ke Supabase gagal (Network / CORS Error):\n` +
+            `1. Pastikan URL Supabase benar (${rawUrl}).\n` +
+            `2. Jika Anda menggunakan Supabase Free Tier, proyek mungkin sedang dijeda (Paused) karena tidak aktif. Buka Supabase Dashboard dan klik "Restore project".\n` +
+            `3. Pastikan ekstensi adblocker di browser Anda tidak memblokir domain supabase.co.`
+          );
+        }
+
+        if (!directRes.ok) {
+          const errText = await directRes.text();
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(errText);
+          } catch {}
+
+          if (directRes.status === 401 || directRes.status === 403) {
+            throw new Error(
+              `Autentikasi Supabase Ditolak (Status ${directRes.status}). ` +
+              `Pastikan Anda menyalin "anon public" API key (bukan service role) dari Project Settings > API di Supabase.`
+            );
+          }
+
+          if (directRes.status === 404) {
+            const hint = discoveredTables.length > 0
+              ? `Tabel yang terdeteksi di database Anda: ${discoveredTables.join(', ')}.`
+              : `Pastikan nama tabel sesuai di Supabase Table Editor.`;
+            throw new Error(`Tabel '${cleanTable}' tidak ditemukan di Supabase (Status 404). ${hint}`);
+          }
+
+          throw new Error(`Supabase error (${directRes.status}): ${parsed?.message || errText}`);
+        }
+
+        const rows = await directRes.json();
+
+        // 2c. Query CP table if available
+        let cpRows: any[] = [];
+        if (cleanCpTable) {
+          try {
+            const cpRes = await fetch(`${rawUrl}/rest/v1/${cleanCpTable}?select=*&limit=500`, {
+              method: 'GET',
+              headers: authHeaders,
+            });
+            if (cpRes.ok) {
+              const parsedCp = await cpRes.json();
+              if (Array.isArray(parsedCp)) cpRows = parsedCp;
+            }
+          } catch {
+            // CP table optional
+          }
         }
 
         data = {

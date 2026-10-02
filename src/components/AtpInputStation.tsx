@@ -298,47 +298,61 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
 
             {supabaseError && (
               <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs">
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className="text-amber-700 font-bold text-sm">⚠️</span>
-                  <div>
-                    <p className="font-bold text-amber-900 text-xs">
-                      Data Terbaca 0 Baris (Terblokir Row Level Security / RLS di Supabase)
-                    </p>
-                    <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">
-                      Tabel Anda sebenarnya sudah berisi data, namun Supabase secara default memblokir pembacaan via API publik tanpa kebijakan (policy) izin baca.
-                    </p>
+                {supabaseError.includes('RLS_BLOCKED') ? (
+                  <>
+                    <div className="flex items-start gap-2 mb-1.5">
+                      <span className="text-amber-700 font-bold text-sm">⚠️</span>
+                      <div>
+                        <p className="font-bold text-amber-900 text-xs">
+                          Data Terbaca 0 Baris (Terblokir Row Level Security / RLS di Supabase)
+                        </p>
+                        <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">
+                          Tabel Anda sebenarnya sudah berisi data, namun Supabase secara default memblokir pembacaan via API publik tanpa kebijakan (policy) izin baca.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 bg-slate-900 text-slate-100 p-2.5 rounded font-mono text-[11px] flex items-center justify-between gap-2 overflow-x-auto">
+                      <span>ALTER TABLE {sbTable || 'master_atp_pai'} DISABLE ROW LEVEL SECURITY;</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `ALTER TABLE ${sbTable || 'master_atp_pai'} DISABLE ROW LEVEL SECURITY;\nCREATE POLICY "Izinkan baca ${sbTable || 'master_atp_pai'}" ON ${sbTable || 'master_atp_pai'} FOR SELECT USING (true);`
+                          );
+                          setCopiedSql(true);
+                          setTimeout(() => setCopiedSql(false), 2500);
+                        }}
+                        className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-[11px] shrink-0 font-sans font-semibold transition-colors"
+                      >
+                        {copiedSql ? '✓ Tersalin!' : 'Salin Perintah SQL'}
+                      </button>
+                    </div>
+
+                    <div className="mt-2 text-[11px] text-slate-700 space-y-1">
+                      <p>
+                        <strong>Langkah Perbaikan (1 Menit):</strong>
+                      </p>
+                      <ol className="list-decimal pl-5 space-y-0.5 text-slate-600">
+                        <li>Buka <strong>Supabase Dashboard &gt; SQL Editor</strong>.</li>
+                        <li>Tempelkan perintah di atas, lalu klik <strong>Run</strong>.</li>
+                        <li>Kembali ke sini dan klik tombol <strong>"Tarik"</strong> lagi. Data akan langsung muncul!</li>
+                      </ol>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <span className="text-rose-600 font-bold text-sm">❌</span>
+                    <div>
+                      <p className="font-bold text-rose-900 text-xs">Koneksi Supabase Belum Berhasil</p>
+                      <p className="text-slate-700 text-[11px] mt-0.5 whitespace-pre-line leading-relaxed">
+                        {supabaseError}
+                      </p>
+                      <p className="text-slate-500 text-[10px] mt-1.5">
+                        💡 <em>Tips:</em> Anda juga dapat langsung menyalin teks JSON dari Supabase Table Editor dan menempelkannya pada tab <strong>Tempel JSON</strong> di atas.
+                      </p>
+                    </div>
                   </div>
-                </div>
-
-                <div className="mt-2 bg-slate-900 text-slate-100 p-2.5 rounded font-mono text-[11px] flex items-center justify-between gap-2 overflow-x-auto">
-                  <span>ALTER TABLE {sbTable || 'master_atp_pai'} DISABLE ROW LEVEL SECURITY;</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `ALTER TABLE ${sbTable || 'master_atp_pai'} DISABLE ROW LEVEL SECURITY;\nCREATE POLICY "Izinkan baca master_atp_pai" ON ${sbTable || 'master_atp_pai'} FOR SELECT USING (true);`
-                      );
-                      setCopiedSql(true);
-                      setTimeout(() => setCopiedSql(false), 2500);
-                    }}
-                    className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-[11px] shrink-0 font-sans font-semibold transition-colors"
-                  >
-                    {copiedSql ? '✓ Tersalin!' : 'Salin Perintah SQL'}
-                  </button>
-                </div>
-
-                <div className="mt-2 text-[11px] text-slate-700 space-y-1">
-                  <p>
-                    <strong>Langkah Perbaikan (1 Menit):</strong>
-                  </p>
-                  <ol className="list-decimal pl-5 space-y-0.5 text-slate-600">
-                    <li>Buka <strong>Supabase Dashboard &gt; SQL Editor</strong>.</li>
-                    <li>Tempelkan perintah di atas, lalu klik <strong>Run</strong>.</li>
-                    <li>Kembali ke sini dan klik tombol <strong>"Tarik Data"</strong> lagi. Data akan langsung muncul!</li>
-                  </ol>
-                  <p className="pt-1 text-[11px] text-slate-500">
-                    <em>Opsi Lain:</em> Anda juga dapat memasukkan <strong>service_role key</strong> (dari Project Settings &gt; API) pada kolom Key di atas, atau salin-tempel langsung di tab <strong>Tempel JSON</strong>.
-                  </p>
-                </div>
+                )}
               </div>
             )}
           </div>
