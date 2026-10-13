@@ -1,16 +1,19 @@
 # Panduan Deploy & Sinkronisasi EduCraft AI ke GitHub Pages
 
-Aplikasi **EduCraft AI** telah disiapkan dengan sinkronisasi penuh antara **RPP Mendalam**, **Bahan Ajar Siap Ajar**, dan **Tujuan Pembelajaran (TP)** serta didukung 2 metode deploy ke **GitHub Pages** agar 100% tampil persis seperti di layar preview ini.
+Aplikasi **EduCraft AI** telah disiapkan dengan sinkronisasi penuh antara **RPP Mendalam**, **Bahan Ajar Siap Ajar**, dan **Tujuan Pembelajaran (TP)** yang diambil langsung dari data Supabase (khususnya kolom **`tp hasil analisis`**) serta disesuaikan secara presisi berdasarkan **Fase** dan **Kelas**.
 
 ---
 
-## Yang Telah Diperbaiki & Disinkronkan:
-1. **Kesinkronan Penuh Tujuan Pembelajaran (TP)**:
-   - Versi default awal kini dipastikan **Q.S. Al-Hujurat/49: 13, Kelas IV** (Elemen Al-Qur'an dan Hadis) lengkap dengan RPP dan Bahan Ajar yang senada.
-   - Pilihan materi yang dipilih (baik dari Supabase maupun katalog) kini otomatis disimpan secara persisten di browser (`localStorage`), sehingga saat Anda membuka kembali halaman web di GitHub, Tujuan Pembelajaran yang tampil adalah versi yang tepat dan tidak melompat ke materi lain.
-2. **Pencegahan Redireksi Putih pada Root GitHub Pages**:
-   - Berkas `index.html` dan folder `/docs` kini dilengkapi script pengarah instan (*zero-delay redirect*) sehingga baik menggunakan metode folder `/docs` maupun `/ (root)`, aplikasi langsung tayang tanpa jeda.
-3. **Penyusunan Ulang Folder `/docs` & `/dist`**:
+## Yang Telah Diperbarui & Disinkronkan:
+1. **Pengambilan TP dari Kolom `tp hasil analisis` Supabase**:
+   - Sistem kini memprioritaskan ekstraksi Tujuan Pembelajaran (TP) dari kolom **`tp hasil analisis`** (serta variasi penamaan seperti `tp_hasil_analisis`, `tp hasil analisa`, `tp_analisis`, dsb.).
+   - Bila data Supabase Anda memiliki kolom ini, TP tersebut otomatis diambil sebagai konten utama penyusunan RPP & Bahan Ajar.
+2. **Presisi Fase & Tingkat Kelas**:
+   - Sistem melakukan kalibrasi dan validasi presisi otomatis antara Fase (Fase A s.d. Fase D) dan Kelas (Kelas I s.d. Kelas IX).
+   - Penambahan filter **Tingkat Kelas** di samping filter **Fase** dan **Elemen**, memudahkan guru menyaring materi sesuai jenjang yang diajar.
+3. **Penyelarasan CP (Capaian Pembelajaran)**:
+   - Capaian Pembelajaran dicocokkan secara presisi berdasarkan kombinasi Elemen, Fase, dan Tingkat Kelas.
+4. **Penyusunan Ulang Folder `/docs` & `/dist` untuk GitHub Pages**:
    - Seluruh berkas *production bundle* terbaru telah dikompilasi secara bersih ke dalam folder `docs/` dan `dist/`.
 
 ---

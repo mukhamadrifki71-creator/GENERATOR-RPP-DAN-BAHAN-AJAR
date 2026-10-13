@@ -507,40 +507,79 @@ app.post('/api/supabase/fetch-atp', async (req: Request, res: Response) => {
       console.log('OpenAPI discovery skipped:', e);
     }
 
-    // 5. Query primary ATP table
-    const endpoint = `${rawUrl}/rest/v1/${targetTable}?select=*&limit=${limit}`;
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers: authHeaders,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let parsedError: any = null;
-      try {
-        parsedError = JSON.parse(errorText);
-      } catch {
-        parsedError = null;
+    if (discoveredTables.length > 0) {
+      const exactMatch = discoveredTables.find((t) => t.toLowerCase() === targetTable.toLowerCase());
+      if (exactMatch) {
+        targetTable = exactMatch;
+      } else {
+        const candidate = discoveredTables.find(
+          (t) =>
+            t.toLowerCase().includes('atp') ||
+            t.toLowerCase().includes('analisis') ||
+            t.toLowerCase().includes('tp') ||
+            t.toLowerCase().includes('materi') ||
+            t.toLowerCase().includes('kurikulum')
+        );
+        if (candidate) targetTable = candidate;
       }
-
-      if (response.status === 404 && parsedError?.code === 'PGRST125') {
-        return res.status(404).json({
-          error: `PGRST125: Jalur request URL tidak valid di Supabase.
-1. Pastikan Supabase URL berformat: https://[id-project].supabase.co (tanpa /rest/v1 di belakangnya). URL yang dicoba: ${rawUrl}
-2. Pastikan tabel '${targetTable}' benar-benar ada di database Supabase Anda (skema 'public').
-3. Tips Cepat: Anda juga bisa membuka Supabase > Table Editor > master_atp_pai, klik Export / Copy JSON, lalu tempel di tab 'Tempel JSON Supabase'.`,
-          endpointUsed: endpoint,
-        });
-      }
-
-      return res.status(response.status).json({
-        error: `Supabase status ${response.status}: ${parsedError?.message || errorText}`,
-        details: parsedError,
-        endpointUsed: endpoint,
-      });
     }
 
-    const data = await response.json();
+    // 5. Query primary ATP table with automatic pagination loop to ensure 100% complete data
+    let allRows: any[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore && allRows.length < 10000) {
+      const endpoint = `${rawUrl}/rest/v1/${targetTable}?select=*&limit=${pageSize}&offset=${offset}`;
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: authHeaders,
+      });
+
+      if (!response.ok) {
+        if (allRows.length === 0) {
+          const errorText = await response.text();
+          let parsedError: any = null;
+          try {
+            parsedError = JSON.parse(errorText);
+          } catch {
+            parsedError = null;
+          }
+
+          if (response.status === 404 && parsedError?.code === 'PGRST125') {
+            return res.status(404).json({
+              error: `PGRST125: Jalur request URL tidak valid di Supabase.
+1. Pastikan Supabase URL berformat: https://[id-project].supabase.co (tanpa /rest/v1 di belakangnya). URL yang dicoba: ${rawUrl}
+2. Pastikan tabel '${targetTable}' benar-benar ada di database Supabase Anda (skema 'public').
+3. Tips Cepat: Anda juga bisa membuka Supabase > Table Editor > ${targetTable}, klik Export / Copy JSON, lalu tempel di tab 'Tempel JSON Supabase'.`,
+              endpointUsed: endpoint,
+            });
+          }
+
+          return res.status(response.status).json({
+            error: `Supabase status ${response.status}: ${parsedError?.message || errorText}`,
+            details: parsedError,
+            endpointUsed: endpoint,
+          });
+        }
+        break;
+      }
+
+      const chunk = await response.json();
+      if (Array.isArray(chunk) && chunk.length > 0) {
+        allRows.push(...chunk);
+        if (chunk.length < pageSize) {
+          hasMore = false;
+        } else {
+          offset += pageSize;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    const data = allRows;
 
     // 6. Attempt to fetch Capaian Pembelajaran (CP) table if exists
     // Priority: targetCpTable -> discovered table matching cp/capaian

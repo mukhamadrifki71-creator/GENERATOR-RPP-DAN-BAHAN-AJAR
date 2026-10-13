@@ -24,6 +24,11 @@ import {
 } from './utils/documentExport';
 import { exportToPowerPoint } from './utils/powerpointExport';
 import {
+  mapSupabaseRowToAtp,
+  extractField,
+  precisionFaseAndKelas,
+} from './utils/curriculumMapper';
+import {
   Sparkles,
   FileText,
   BookOpen,
@@ -34,7 +39,10 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-const DEFAULT_INITIAL_ATP = MASTER_ATP_PAI_CATALOG[5]; // Q.S. Al-Hujurat/49: 13, Kelas IV
+const DEFAULT_INITIAL_ATP =
+  MASTER_ATP_PAI_CATALOG.find((i) => i.target_kelas === 'Kelas III') ||
+  MASTER_ATP_PAI_CATALOG[20] ||
+  MASTER_ATP_PAI_CATALOG[0];
 const DEFAULT_INITIAL_OPTIONS: GenerationOptions = {
   duration: '1 x 3 jam pelajaran (105 Menit)',
   pedagogicalStrategy: 'Storytelling Reflektif & Diskusi Kasus',
@@ -55,42 +63,43 @@ const DEFAULT_SIGNATORY: SignatoryConfig = {
   })}`,
 };
 
-// Robust helper to extract fields from Supabase regardless of exact column casing or naming variations
-function extractField(r: any, patterns: string[]): string {
-  if (!r || typeof r !== 'object') return '';
-  for (const pattern of patterns) {
-    if (r[pattern] !== undefined && r[pattern] !== null && String(r[pattern]).trim() !== '') {
-      return String(r[pattern]).trim();
-    }
-  }
-  const keys = Object.keys(r);
-  for (const pattern of patterns) {
-    const foundKey = keys.find(
-      (k) =>
-        k.toLowerCase() === pattern.toLowerCase() ||
-        k.toLowerCase().includes(pattern.toLowerCase())
-    );
-    if (foundKey && r[foundKey] !== undefined && r[foundKey] !== null && String(r[foundKey]).trim() !== '') {
-      return String(r[foundKey]).trim();
-    }
-  }
-  return '';
-}
-
 export default function App() {
   const [activeNavTab, setActiveNavTab] = useState<string>('generator');
 
-  // Load cached Supabase items if user already synced earlier
+  // Load cached Supabase items if user already synced earlier, ensuring 80+ records and Kelas III & IV presence
   const [catalogItems, setCatalogItems] = useState<MasterAtpRecord[]>(() => {
     const cached = localStorage.getItem('educraft_cached_catalog');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        const hasKelas3 =
+          Array.isArray(parsed) &&
+          parsed.some((p) => p.target_kelas?.includes('III') || p.target_kelas?.includes('3'));
+        const hasKelas4 =
+          Array.isArray(parsed) &&
+          parsed.some((p) => p.target_kelas?.includes('IV') || p.target_kelas?.includes('4'));
+        const hasOldFaseD =
+          Array.isArray(parsed) &&
+          parsed.some((p) => p.fase === 'Fase D' || p.target_kelas?.includes('VII'));
+        if (Array.isArray(parsed) && parsed.length >= 80 && hasKelas3 && hasKelas4 && !hasOldFaseD) {
+          return parsed;
+        }
       } catch {}
     }
+    try {
+      localStorage.setItem('educraft_cached_catalog', JSON.stringify(MASTER_ATP_PAI_CATALOG));
+    } catch {}
     return MASTER_ATP_PAI_CATALOG;
   });
+
+  // Centralized reset/restore to the complete authentic master catalog (98 TP)
+  const handleRestoreMasterCatalog = () => {
+    setCatalogItems(MASTER_ATP_PAI_CATALOG);
+    localStorage.setItem('educraft_cached_catalog', JSON.stringify(MASTER_ATP_PAI_CATALOG));
+    const sampleKelas3 =
+      MASTER_ATP_PAI_CATALOG.find((i) => i.target_kelas === 'Kelas III') || MASTER_ATP_PAI_CATALOG[0];
+    handleSelectAtp(sampleKelas3);
+  };
 
   // Helper to resolve initial ATP consistently across state initializers
   const getInitialAtp = (): MasterAtpRecord => {
@@ -123,6 +132,8 @@ export default function App() {
     return !!(localStorage.getItem('educraft_sb_key') || localStorage.getItem('educraft_cached_catalog'));
   });
   const [supabaseError, setSupabaseError] = useState<string>('');
+  const [discoveredTables, setDiscoveredTables] = useState<string[]>([]);
+  const [detectedColumns, setDetectedColumns] = useState<string[]>([]);
 
   // Pre-seed generationResult so the full RPP and teaching material displays immediately and matches initialAtp
   const [generationResult, setGenerationResult] = useState<GenerationResult>(() => {
@@ -282,7 +293,14 @@ export default function App() {
           if (exactMatch) {
             cleanTable = exactMatch;
           } else {
-            const atpCandidate = discoveredTables.find((t) => t.toLowerCase().includes('atp'));
+            const atpCandidate = discoveredTables.find(
+              (t) =>
+                t.toLowerCase().includes('atp') ||
+                t.toLowerCase().includes('analisis') ||
+                t.toLowerCase().includes('tp') ||
+                t.toLowerCase().includes('materi') ||
+                t.toLowerCase().includes('kurikulum')
+            );
             if (atpCandidate) cleanTable = atpCandidate;
           }
 
@@ -299,53 +317,81 @@ export default function App() {
           }
         }
 
-        // 2b. Query primary ATP table directly
-        let directRes: Response;
-        try {
-          directRes = await fetch(`${rawUrl}/rest/v1/${cleanTable}?select=*&limit=1000`, {
-            method: 'GET',
-            headers: authHeaders,
-          });
-        } catch (networkErr: any) {
-          throw new Error(
-            `Koneksi ke Supabase gagal (Network / CORS Error):\n` +
-            `1. Pastikan URL Supabase benar (${rawUrl}).\n` +
-            `2. Jika Anda menggunakan Supabase Free Tier, proyek mungkin sedang dijeda (Paused) karena tidak aktif. Buka Supabase Dashboard dan klik "Restore project".\n` +
-            `3. Pastikan ekstensi adblocker di browser Anda tidak memblokir domain supabase.co.`
-          );
-        }
+        // 2b. Query primary ATP / Materi table directly with pagination loop to fetch ALL rows
+        let allDirectRows: any[] = [];
+        const pageSize = 1000;
+        let offset = 0;
+        let hasMore = true;
 
-        if (!directRes.ok) {
-          const errText = await directRes.text();
-          let parsed: any = null;
+        while (hasMore && allDirectRows.length < 10000) {
+          let directRes: Response;
           try {
-            parsed = JSON.parse(errText);
-          } catch {}
-
-          if (directRes.status === 401 || directRes.status === 403) {
-            throw new Error(
-              `Autentikasi Supabase Ditolak (Status ${directRes.status}). ` +
-              `Pastikan Anda menyalin "anon public" API key (bukan service role) dari Project Settings > API di Supabase.`
+            directRes = await fetch(
+              `${rawUrl}/rest/v1/${cleanTable}?select=*&limit=${pageSize}&offset=${offset}`,
+              {
+                method: 'GET',
+                headers: authHeaders,
+              }
             );
+          } catch (networkErr: any) {
+            if (allDirectRows.length === 0) {
+              throw new Error(
+                `Koneksi ke Supabase gagal (Network / CORS Error):\n` +
+                `1. Pastikan URL Supabase benar (${rawUrl}).\n` +
+                `2. Jika Anda menggunakan Supabase Free Tier, proyek mungkin sedang dijeda (Paused) karena tidak aktif. Buka Supabase Dashboard dan klik "Restore project".\n` +
+                `3. Pastikan ekstensi adblocker di browser Anda tidak memblokir domain supabase.co.`
+              );
+            }
+            break;
           }
 
-          if (directRes.status === 404) {
-            const hint = discoveredTables.length > 0
-              ? `Tabel yang terdeteksi di database Anda: ${discoveredTables.join(', ')}.`
-              : `Pastikan nama tabel sesuai di Supabase Table Editor.`;
-            throw new Error(`Tabel '${cleanTable}' tidak ditemukan di Supabase (Status 404). ${hint}`);
+          if (!directRes.ok) {
+            if (allDirectRows.length === 0) {
+              const errText = await directRes.text();
+              let parsed: any = null;
+              try {
+                parsed = JSON.parse(errText);
+              } catch {}
+
+              if (directRes.status === 401 || directRes.status === 403) {
+                throw new Error(
+                  `Autentikasi Supabase Ditolak (Status ${directRes.status}). ` +
+                  `Pastikan Anda menyalin "anon public" API key (bukan service role) dari Project Settings > API di Supabase.`
+                );
+              }
+
+              if (directRes.status === 404) {
+                const hint = discoveredTables.length > 0
+                  ? `Tabel yang terdeteksi di database Anda: ${discoveredTables.join(', ')}.`
+                  : `Pastikan nama tabel sesuai di Supabase Table Editor.`;
+                throw new Error(`Tabel '${cleanTable}' tidak ditemukan di Supabase (Status 404). ${hint}`);
+              }
+
+              throw new Error(`Supabase error (${directRes.status}): ${parsed?.message || errText}`);
+            }
+            break;
           }
 
-          throw new Error(`Supabase error (${directRes.status}): ${parsed?.message || errText}`);
+          const chunk = await directRes.json();
+          if (Array.isArray(chunk) && chunk.length > 0) {
+            allDirectRows.push(...chunk);
+            if (chunk.length < pageSize) {
+              hasMore = false;
+            } else {
+              offset += pageSize;
+            }
+          } else {
+            hasMore = false;
+          }
         }
 
-        const rows = await directRes.json();
+        const rows = allDirectRows;
 
         // 2c. Query CP table if available
         let cpRows: any[] = [];
         if (cleanCpTable) {
           try {
-            const cpRes = await fetch(`${rawUrl}/rest/v1/${cleanCpTable}?select=*&limit=500`, {
+            const cpRes = await fetch(`${rawUrl}/rest/v1/${cleanCpTable}?select=*&limit=1000`, {
               method: 'GET',
               headers: authHeaders,
             });
@@ -361,99 +407,22 @@ export default function App() {
         data = {
           data: rows,
           cpData: cpRows,
+          discoveredTables,
         };
       }
 
       if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
         const cpDataList: any[] = Array.isArray(data.cpData) ? data.cpData : [];
-        const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const mappedRows: MasterAtpRecord[] = data.data.map((r: any, idx: number) =>
+          mapSupabaseRowToAtp(r, idx, cpDataList)
+        );
 
-        const mappedRows: MasterAtpRecord[] = data.data.map((r: any, idx: number) => {
-          let cp = extractField(r, [
-            'capaian_pembelajaran',
-            'cp',
-            'capaian',
-            'deskripsi_cp',
-            'capaian_fase',
-            'cp_elemen',
-            'cp_fase',
-            'capaian_pembelajaran_elemen',
-            'capaian_pembelajaran_fase',
-            'teks_cp',
-            'deskripsi',
-            'kompetensi',
-            'kompetensi_inti',
-            'kd',
-          ]);
-
-          const tp = extractField(r, [
-            'tujuan_pembelajaran',
-            'tp',
-            'tujuan',
-            'deskripsi_tp',
-            'tujuan_pembelajaran_atp',
-            'materi',
-          ]);
-
-          const fase = extractField(r, ['fase', 'fase_pembelajaran', 'tingkat_fase']) || 'Fase B';
-          const elemen = extractField(r, ['elemen', 'elemen_pembelajaran', 'bidang', 'aspek']) || 'Pendidikan Agama Islam';
-          const target_kelas = extractField(r, ['target_kelas', 'kelas', 'tingkat_kelas', 'jenjang']) || 'Kelas IV';
-          const no_atp = extractField(r, ['no_atp', 'nomor_atp', 'nomor', 'no', 'urutan']) || `${idx + 1}.1`;
-          const atp = extractField(r, ['alur_tujuan_pembelajaran', 'atp', 'alur', 'alur_pembelajaran']) || tp;
-
-          // If CP is missing in ATP row, try to match from separate CP table (if available)
-          if (!cp && cpDataList.length > 0) {
-            const cpId = r.id_cp || r.cp_id || r.kode_cp;
-            let matchedCp = null;
-
-            if (cpId) {
-              matchedCp = cpDataList.find(
-                (c) =>
-                  String(c.id) === String(cpId) ||
-                  String(c.kode_cp) === String(cpId) ||
-                  String(c.kode) === String(cpId)
-              );
-            }
-
-            if (!matchedCp && elemen && fase) {
-              matchedCp = cpDataList.find(
-                (c) =>
-                  norm(extractField(c, ['elemen', 'elemen_pembelajaran'])) === norm(elemen) &&
-                  norm(extractField(c, ['fase', 'fase_pembelajaran'])) === norm(fase)
-              );
-            }
-
-            if (!matchedCp && elemen) {
-              matchedCp = cpDataList.find(
-                (c) => norm(extractField(c, ['elemen', 'elemen_pembelajaran'])) === norm(elemen)
-              );
-            }
-
-            if (matchedCp) {
-              cp = extractField(matchedCp, [
-                'capaian_pembelajaran',
-                'cp',
-                'capaian',
-                'deskripsi_cp',
-                'deskripsi',
-                'teks_cp',
-              ]);
-            }
-          }
-
-          return {
-            id: r.id || `sb-${idx}`,
-            fase,
-            elemen,
-            capaian_pembelajaran:
-              cp ||
-              'Peserta didik mampu memahami dan menerapkan nilai-nilai ajaran Islam dalam kehidupan sehari-hari.',
-            tujuan_pembelajaran: tp,
-            target_kelas,
-            no_atp,
-            alur_tujuan_pembelajaran: atp,
-          };
-        });
+        if (Array.isArray(data.discoveredTables)) {
+          setDiscoveredTables(data.discoveredTables);
+        }
+        if (data.data.length > 0 && typeof data.data[0] === 'object') {
+          setDetectedColumns(Object.keys(data.data[0]));
+        }
 
         setCatalogItems(mappedRows);
         handleSelectAtp(mappedRows[0]);
@@ -617,6 +586,9 @@ export default function App() {
               onRefreshSupabase={handleRefreshSupabase}
               onDisconnectSupabase={handleDisconnectSupabase}
               supabaseError={supabaseError}
+              discoveredTables={discoveredTables}
+              detectedColumns={detectedColumns}
+              onRestoreMasterCatalog={handleRestoreMasterCatalog}
             />
 
             {/* Generated Results Presentation */}
@@ -772,6 +744,7 @@ export default function App() {
             onOpenConfig={() => {
               setActiveNavTab('generator');
             }}
+            onRestoreMasterCatalog={handleRestoreMasterCatalog}
           />
         )}
 

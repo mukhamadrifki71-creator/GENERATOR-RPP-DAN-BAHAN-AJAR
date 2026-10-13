@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { MasterAtpRecord, GenerationOptions } from '../types';
 import {
+  mapSupabaseRowToAtp,
+  matchFase,
+  matchKelas,
+  matchElemen,
+} from '../utils/curriculumMapper';
+import {
   Database,
   Code,
   SlidersHorizontal,
@@ -30,6 +36,9 @@ interface AtpInputStationProps {
   onRefreshSupabase: (url: string, key: string, table: string, cpTable?: string) => Promise<boolean>;
   onDisconnectSupabase?: () => void;
   supabaseError: string;
+  discoveredTables?: string[];
+  detectedColumns?: string[];
+  onRestoreMasterCatalog?: () => void;
 }
 
 export const AtpInputStation: React.FC<AtpInputStationProps> = ({
@@ -45,6 +54,9 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
   onRefreshSupabase,
   onDisconnectSupabase,
   supabaseError,
+  discoveredTables = [],
+  detectedColumns = [],
+  onRestoreMasterCatalog,
 }) => {
   // Only 2 simple modes: 'catalog' (from Supabase) and 'json' (quick paste)
   const [inputMode, setInputMode] = useState<'catalog' | 'json'>('catalog');
@@ -52,7 +64,9 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
   const [jsonError, setJsonError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterFase, setFilterFase] = useState<string>('all');
+  const [filterKelas, setFilterKelas] = useState<string>('all');
   const [filterElemen, setFilterElemen] = useState<string>('all');
+  const [isExpandedList, setIsExpandedList] = useState<boolean>(false);
 
   // Supabase credentials state - loaded directly from persistent localStorage
   const [showConfig, setShowConfig] = useState<boolean>(() => {
@@ -133,16 +147,20 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
     }
   };
 
-  // Filter catalog
+  // Filter catalog with intelligent, resilient matching on Fase, Kelas, Elemen, and Materi
   const filteredCatalog = catalogItems.filter((item) => {
     const matchSearch =
       (item.tujuan_pembelajaran || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.materi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.lingkup_materi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.capaian_pembelajaran || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.elemen || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.target_kelas || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchFase = filterFase === 'all' || item.fase === filterFase;
-    const matchElemen = filterElemen === 'all' || item.elemen === filterElemen;
-    return matchSearch && matchFase && matchElemen;
+      (item.target_kelas || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.no_atp || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchF = matchFase(item.fase, filterFase);
+    const matchK = matchKelas(item.target_kelas, filterKelas);
+    const matchE = matchElemen(item.elemen, filterElemen);
+    return matchSearch && matchF && matchK && matchE;
   });
 
   const handleParseJson = () => {
@@ -161,16 +179,10 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
         recordList = [parsed];
       }
 
-      const formatted: MasterAtpRecord[] = recordList.map((r, i) => ({
-        id: r.id || `json-${i}`,
-        fase: r.fase || 'Fase B',
-        elemen: r.elemen || 'Al-Qur\'an dan Hadis',
-        capaian_pembelajaran: r.capaian_pembelajaran || r.cp || '',
-        tujuan_pembelajaran: r.tujuan_pembelajaran || r.tp || '',
-        target_kelas: r.target_kelas || r.kelas || 'Kelas IV',
-        no_atp: String(r.no_atp || r.nomor || `${i + 1}.1`),
-        alur_tujuan_pembelajaran: r.alur_tujuan_pembelajaran || r.atp || r.tujuan_pembelajaran || '',
-      }));
+      // Automatically map rows prioritizing "tp hasil analisis" and calibrating Fase & Kelas
+      const formatted: MasterAtpRecord[] = recordList.map((r, i) =>
+        mapSupabaseRowToAtp(r, i)
+      );
 
       if (formatted.length > 0) {
         setCatalogItems(formatted);
@@ -421,6 +433,42 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
               💡 <strong>Integrasi CP:</strong> Capaian Pembelajaran (CP) dapat tergabung dalam tabel ATP (kolom <code className="text-teal-900 bg-slate-100 px-1 py-0.2 rounded">capaian_pembelajaran</code>/<code className="text-teal-900 bg-slate-100 px-1 py-0.2 rounded">cp</code>) atau dari tabel terpisah (misal: <code className="text-teal-900 bg-slate-100 px-1 py-0.2 rounded">master_cp_pai</code>). Sistem otomatis mendeteksi dan menghubungkan keduanya.
             </p>
 
+            {discoveredTables && discoveredTables.length > 0 && (
+              <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-md">
+                <span className="text-[10px] font-bold text-slate-700 block mb-1">
+                  Tabel yang Terdeteksi di Database Supabase Anda (Klik untuk memilih dan menarik tabel):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {discoveredTables.map((tbl) => (
+                    <button
+                      key={tbl}
+                      type="button"
+                      onClick={() => {
+                        setSbTable(tbl);
+                        localStorage.setItem('educraft_sb_table', tbl);
+                        onRefreshSupabase(sbUrl, sbKey, tbl, sbCpTable);
+                      }}
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors cursor-pointer ${
+                        sbTable.toLowerCase() === tbl.toLowerCase()
+                          ? 'bg-teal-700 text-white font-bold shadow-xs'
+                          : 'bg-white border border-slate-300 text-slate-700 hover:border-teal-500 hover:bg-teal-50'
+                      }`}
+                      title={`Gunakan tabel ${tbl}`}
+                    >
+                      {tbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {detectedColumns && detectedColumns.length > 0 && (
+              <div className="mt-1 text-[10px] text-slate-500 overflow-x-auto">
+                <span className="font-semibold text-slate-600">Kolom terbaca ({detectedColumns.length}): </span>
+                <span className="font-mono text-teal-800">{detectedColumns.join(', ')}</span>
+              </div>
+            )}
+
             {supabaseError && (
               <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs">
                 {supabaseError.includes('RLS_BLOCKED') ? (
@@ -498,18 +546,49 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                 className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={filterFase}
                 onChange={(e) => setFilterFase(e.target.value)}
                 aria-label="Filter Fase Pembelajaran"
                 className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
               >
-                <option value="all">Semua Fase</option>
-                <option value="Fase A">Fase A (Kelas 1-2)</option>
-                <option value="Fase B">Fase B (Kelas 3-4)</option>
-                <option value="Fase C">Fase C (Kelas 5-6)</option>
-                <option value="Fase D">Fase D (SMP)</option>
+                <option value="all">Semua Fase ({catalogItems.length})</option>
+                <option value="Fase A">
+                  Fase A (Kelas 1-2 SD: {catalogItems.filter((i) => matchFase(i.fase, 'Fase A')).length})
+                </option>
+                <option value="Fase B">
+                  Fase B (Kelas 3-4 SD: {catalogItems.filter((i) => matchFase(i.fase, 'Fase B')).length})
+                </option>
+                <option value="Fase C">
+                  Fase C (Kelas 5-6 SD: {catalogItems.filter((i) => matchFase(i.fase, 'Fase C')).length})
+                </option>
+              </select>
+              <select
+                value={filterKelas}
+                onChange={(e) => setFilterKelas(e.target.value)}
+                aria-label="Filter Tingkat Kelas"
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+              >
+                <option value="all">Semua Kelas ({catalogItems.length})</option>
+                <option value="Kelas I">
+                  Kelas I ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas I')).length})
+                </option>
+                <option value="Kelas II">
+                  Kelas II ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas II')).length})
+                </option>
+                <option value="Kelas III">
+                  Kelas III ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas III')).length})
+                </option>
+                <option value="Kelas IV">
+                  Kelas IV ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas IV')).length})
+                </option>
+                <option value="Kelas V">
+                  Kelas V ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas V')).length})
+                </option>
+                <option value="Kelas VI">
+                  Kelas VI ({catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas VI')).length})
+                </option>
               </select>
               <select
                 value={filterElemen}
@@ -527,12 +606,161 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
             </div>
           </div>
 
+          {/* Quick grade filter badges & stats */}
+          {(() => {
+            const countFaseA = catalogItems.filter((i) => matchFase(i.fase, 'Fase A')).length;
+            const countFaseB = catalogItems.filter((i) => matchFase(i.fase, 'Fase B')).length;
+            const countFaseC = catalogItems.filter((i) => matchFase(i.fase, 'Fase C')).length;
+            const countKelas3 = catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas III')).length;
+            const countKelas4 = catalogItems.filter((i) => matchKelas(i.target_kelas, 'Kelas IV')).length;
+
+            return (
+              <div className="mb-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-800 flex items-center gap-1 mr-1">
+                    <span>📚 Total: {catalogItems.length} TP</span>
+                    {catalogItems.length >= 80 && (
+                      <span className="text-[10px] bg-teal-100 text-teal-800 font-semibold px-1.5 py-0.5 rounded">
+                        ✓ 80+ Lengkap
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('all');
+                      setFilterKelas('all');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterFase === 'all' && filterKelas === 'all'
+                        ? 'bg-teal-700 text-white'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Semua ({catalogItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('Fase A');
+                      setFilterKelas('all');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterFase === 'Fase A' && filterKelas === 'all'
+                        ? 'bg-teal-700 text-white'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Fase A ({countFaseA})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('Fase B');
+                      setFilterKelas('all');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterFase === 'Fase B' && filterKelas === 'all'
+                        ? 'bg-teal-700 text-white font-bold ring-2 ring-teal-500/30'
+                        : 'bg-white border border-teal-300 text-teal-900 font-semibold hover:bg-teal-50'
+                    }`}
+                  >
+                    Fase B (Total: {countFaseB})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('Fase C');
+                      setFilterKelas('all');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterFase === 'Fase C' && filterKelas === 'all'
+                        ? 'bg-teal-700 text-white'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Fase C ({countFaseC})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('Fase B');
+                      setFilterKelas('Kelas III');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterKelas === 'Kelas III'
+                        ? 'bg-amber-600 text-white font-bold'
+                        : 'bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100'
+                    }`}
+                  >
+                    Kelas III ({countKelas3})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterFase('Fase B');
+                      setFilterKelas('Kelas IV');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      filterKelas === 'Kelas IV'
+                        ? 'bg-amber-600 text-white font-bold'
+                        : 'bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100'
+                    }`}
+                  >
+                    Kelas IV ({countKelas4})
+                  </button>
+                </div>
+
+                {onRestoreMasterCatalog && (
+                  <button
+                    type="button"
+                    onClick={onRestoreMasterCatalog}
+                    title="Muat ulang seluruh Tujuan Pembelajaran resmi Kurikulum Merdeka PAI SD (Fase A, B, C)"
+                    className="text-[11px] font-semibold text-teal-800 bg-white border border-teal-300 hover:bg-teal-50 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>⚡ Muat Master Lengkap (98 TP)</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Status info bar */}
+          <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 mb-3 px-1 gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-800">
+                Menampilkan {filteredCatalog.length} dari {catalogItems.length} Materi Pembelajaran
+              </span>
+              {(filterFase !== 'all' || filterKelas !== 'all' || filterElemen !== 'all' || searchQuery) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterFase('all');
+                    setFilterKelas('all');
+                    setFilterElemen('all');
+                    setSearchQuery('');
+                  }}
+                  className="text-teal-700 hover:text-teal-900 underline font-semibold text-[11px] cursor-pointer"
+                >
+                  Reset Filter
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsExpandedList(!isExpandedList)}
+              className="text-xs font-semibold text-teal-800 hover:text-teal-950 underline cursor-pointer"
+            >
+              {isExpandedList ? 'Tampilan Ringkas' : 'Perluas Tampilan Daftar (Lihat Semua)'}
+            </button>
+          </div>
+
           {filteredCatalog.length === 0 ? (
             <div className="p-8 text-center bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-500">
-              Tidak ada materi yang sesuai dengan pencarian atau filter.
+              Tidak ada materi yang sesuai dengan pencarian atau filter Fase & Kelas terpilih.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 ${isExpandedList ? 'max-h-[620px]' : 'max-h-80'} overflow-y-auto pr-1`}>
               {filteredCatalog.map((item, idx) => {
                 const isSelected =
                   currentAtp.tujuan_pembelajaran === item.tujuan_pembelajaran &&
@@ -552,20 +780,42 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                         {item.fase} · {item.target_kelas}
                       </span>
                       <span className="text-slate-400 font-mono text-[11px]">
-                        ATP {item.no_atp}
+                        ATP #{item.no_atp}
                       </span>
                     </div>
-                    <div className="text-xs font-semibold text-slate-900 mb-1 line-clamp-1">
-                      {item.elemen}
+
+                    <div className="text-xs font-semibold text-slate-900 mb-1.5 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-600 shrink-0"></span>
+                      <span className="line-clamp-1">{item.elemen}</span>
                     </div>
+
+                    {(item.materi || item.lingkup_materi) && (
+                      <div className="mb-2 p-1.5 bg-amber-50/90 border border-amber-200 rounded text-left">
+                        <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wide block">
+                          Materi Pokok:
+                        </span>
+                        <p className="text-xs font-bold text-amber-950 line-clamp-2">
+                          {item.materi || item.lingkup_materi}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="mb-1">
-                      <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wide block">
-                        TP:
-                      </span>
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wide">
+                          TP (Tujuan Pembelajaran):
+                        </span>
+                        {item.tp_hasil_analisis && (
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.2 rounded border border-emerald-200 shrink-0">
+                            tp hasil analisis
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed font-medium">
                         {item.tujuan_pembelajaran}
                       </p>
                     </div>
+
                     {item.capaian_pembelajaran && (
                       <div className="mt-1 pt-1 border-t border-slate-100">
                         <span className="text-[10px] font-semibold text-slate-500 block">
@@ -576,6 +826,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                         </p>
                       </div>
                     )}
+
                     {isSelected && (
                       <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-teal-800">
                         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -661,6 +912,17 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
               <span className="text-slate-400 font-mono">No. ATP: {currentAtp.no_atp}</span>
             </div>
 
+            {(currentAtp.materi || currentAtp.lingkup_materi) && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wide block mb-0.5">
+                  Materi Pokok / Lingkup Materi Terpilih:
+                </span>
+                <p className="text-sm font-bold text-amber-950">
+                  {currentAtp.materi || currentAtp.lingkup_materi}
+                </p>
+              </div>
+            )}
+
             <div>
               <span className="text-[11px] font-bold text-teal-800 uppercase tracking-wide block mb-0.5">
                 Capaian Pembelajaran (CP dari Supabase):
@@ -671,9 +933,21 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
             </div>
 
             <div>
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block mb-0.5">
-                Tujuan Pembelajaran (TP dari Supabase):
-              </span>
+              <div className="flex items-center justify-between flex-wrap gap-1.5 mb-1">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                  Tujuan Pembelajaran (TP):
+                </span>
+                {currentAtp.tp_hasil_analisis ? (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded border border-emerald-300 inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>Sumber: Kolom "tp hasil analisis" Supabase</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-teal-50 text-teal-800 font-semibold px-2 py-0.5 rounded border border-teal-200">
+                    Sumber: Data Supabase ({currentAtp.fase} - {currentAtp.target_kelas})
+                  </span>
+                )}
+              </div>
               <p className="text-sm font-bold text-slate-900 leading-snug">
                 {currentAtp.tujuan_pembelajaran}
               </p>

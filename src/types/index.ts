@@ -4,6 +4,11 @@ export interface MasterAtpRecord {
   elemen: string;
   capaian_pembelajaran: string;
   tujuan_pembelajaran: string;
+  tp_hasil_analisis?: string;
+  materi?: string;
+  lingkup_materi?: string;
+  semester?: string;
+  alokasi_waktu?: string;
   target_kelas: string;
   no_atp: string;
   alur_tujuan_pembelajaran: string;

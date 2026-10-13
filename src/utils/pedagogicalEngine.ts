@@ -65,15 +65,18 @@ function analyzeTopic(atp: MasterAtpRecord): TopicKnowledge {
     }
   }
 
-  // 2. Extract clean title
-  let cleanTitle = atp.tujuan_pembelajaran;
-  if (cleanTitle.includes(':')) {
-    cleanTitle = cleanTitle.split(':')[0].trim();
+  // 2. Extract clean title with priority on actual Materi Pokok from Supabase
+  let cleanTitle = atp.materi || atp.lingkup_materi || '';
+  if (!cleanTitle) {
+    cleanTitle = atp.tujuan_pembelajaran;
+    if (cleanTitle.includes(':')) {
+      cleanTitle = cleanTitle.split(':')[0].trim();
+    }
+    cleanTitle = cleanTitle
+      .replace(/^(Peserta didik mampu|Murid dapat|Mampu|Dapat|Memahami|Menjelaskan|Mempraktikkan|Mengenal|Meneladani|Membaca)\s+/i, '')
+      .trim();
+    if (!cleanTitle) cleanTitle = atp.elemen;
   }
-  cleanTitle = cleanTitle
-    .replace(/^(Peserta didik mampu|Murid dapat|Mampu|Dapat|Memahami|Menjelaskan|Mempraktikkan|Mengenal|Meneladani|Membaca)\s+/i, '')
-    .trim();
-  if (!cleanTitle) cleanTitle = atp.elemen;
   cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
 
   // 3. Domain-specific synthesized content and customized templates
