@@ -1,52 +1,53 @@
-# Panduan Deploy EduCraft AI ke GitHub Pages
+# Panduan Deploy & Sinkronisasi EduCraft AI ke GitHub Pages
 
-Aplikasi **EduCraft AI** telah disiapkan dengan 2 metode deploy ke **GitHub Pages** agar 100% pasti berhasil dan tidak mengalami layar putih / error 404.
-
----
-
-## Mengapa Sebelumnya Halaman Tidak Muncul? (Sudah Diperbaiki)
-1. **Konflik Dependency pada GitHub Actions**: Sebelumnya proses `npm install` di GitHub Actions gagal karena bentrok peer dependency antara Vite dan esbuild. Sekarang sudah ditambahkan `.npmrc` dengan `legacy-peer-deps=true` dan berkas `package-lock.json` yang bersih.
-2. **Pengaturan Default GitHub Pages**: Secara default, GitHub Pages mengarahkan ke folder *root* (`/`). Jika folder root disajikan tanpa dikompilasi, browser tidak dapat membaca file TypeScript (`.tsx`). Sekarang kami telah menyediakan folder **`/docs`** yang langsung berisi file web siap saji!
+Aplikasi **EduCraft AI** telah disiapkan dengan sinkronisasi penuh antara **RPP Mendalam**, **Bahan Ajar Siap Ajar**, dan **Tujuan Pembelajaran (TP)** serta didukung 2 metode deploy ke **GitHub Pages** agar 100% tampil persis seperti di layar preview ini.
 
 ---
 
-## Cara Deploy (Pilih Salah Satu Metode yang Anda Sukai):
-
-### METODE 1: Paling Mudah & Cepat (Lewat Folder `/docs`) — DIREKOMENDASIKAN
-Metode ini tidak memerlukan build tambahan di GitHub Actions karena folder `docs/` sudah otomatis ter-compile dan siap tayang.
-
-1. Buka repository Anda di GitHub: `https://github.com/USERNAME_ANDA/NAMA_REPO`.
-2. Klik tab **Settings** (Pengaturan).
-3. Di menu sebelah kiri, pilih **Pages** (di bagian *Code and automation*).
-4. Pada bagian **Build and deployment**:
-   - **Source**: Pilih **Deploy from a branch**
-   - **Branch**: Pilih **main** (atau **master**)
-   - **Folder**: Ubah dari `/ (root)` menjadi **`/docs`**
-5. Klik tombol **Save**.
-6. Tunggu 1–2 menit, lalu segarkan halaman. Alamat web Anda akan muncul:
-   👉 **`https://USERNAME_ANDA.github.io/NAMA_REPO/`**
+## Yang Telah Diperbaiki & Disinkronkan:
+1. **Kesinkronan Penuh Tujuan Pembelajaran (TP)**:
+   - Versi default awal kini dipastikan **Q.S. Al-Hujurat/49: 13, Kelas IV** (Elemen Al-Qur'an dan Hadis) lengkap dengan RPP dan Bahan Ajar yang senada.
+   - Pilihan materi yang dipilih (baik dari Supabase maupun katalog) kini otomatis disimpan secara persisten di browser (`localStorage`), sehingga saat Anda membuka kembali halaman web di GitHub, Tujuan Pembelajaran yang tampil adalah versi yang tepat dan tidak melompat ke materi lain.
+2. **Pencegahan Redireksi Putih pada Root GitHub Pages**:
+   - Berkas `index.html` dan folder `/docs` kini dilengkapi script pengarah instan (*zero-delay redirect*) sehingga baik menggunakan metode folder `/docs` maupun `/ (root)`, aplikasi langsung tayang tanpa jeda.
+3. **Penyusunan Ulang Folder `/docs` & `/dist`**:
+   - Seluruh berkas *production bundle* terbaru telah dikompilasi secara bersih ke dalam folder `docs/` dan `dist/`.
 
 ---
 
-### METODE 2: Otomatis via GitHub Actions
-Jika Anda ingin GitHub otomatis mem-build setiap kali Anda melakukan `git push`:
+## 3 Langkah Mudah Memperbarui Halaman GitHub Anda:
 
-1. Buka repository Anda di GitHub: `https://github.com/USERNAME_ANDA/NAMA_REPO`.
-2. Klik tab **Settings** > menu **Pages**.
-3. Pada bagian **Build and deployment > Source**, pilih **GitHub Actions**.
-4. GitHub Actions akan secara otomatis menjalankan workflow `.github/workflows/deploy.yml` yang sudah kami perbaiki.
-5. Anda dapat memantau prosesnya di tab **Actions** pada repository Anda.
+Jalankan perintah berikut di terminal komputer Anda (di dalam folder repository proyek):
 
----
-
-## Perintah Git untuk Mengunggah Perbaikan Ini ke GitHub:
-Jalankan di terminal proyek Anda:
 ```bash
 git add .
-git commit -m "fix: Perbaiki konfigurasi deploy GitHub Pages & folder docs"
+git commit -m "fix: Sinkronkan Tujuan Pembelajaran dan Bahan Ajar terbaru ke GitHub Pages"
 git push origin main
 ```
-*(Ganti `main` dengan nama branch Anda jika menggunakan `master`).*
+*(Gunakan `git push origin master` jika branch utama Anda adalah `master`).*
+
+Setelah berhasil di-push:
+1. Buka situs GitHub Pages Anda: `https://USERNAME.github.io/NAMA_REPO/`.
+2. Lakukan **Hard Refresh** pada browser Anda untuk membersihkan cache berkas lama:
+   - **Windows / Linux**: Tekan `Ctrl + F5` atau `Ctrl + Shift + R`.
+   - **Mac**: Tekan `Cmd + Shift + R`.
+3. Halaman GitHub Pages Anda akan langsung menampilkan **Tujuan Pembelajaran** dan **Bahan Ajar** yang persis, serasi, dan tersinkronkan 100% seperti di preview ini!
+
+---
+
+## Pilihan Pengaturan di GitHub Pages (Settings > Pages):
+
+### METODE 1: Melalui Folder `/docs` (Sangat Direkomendasikan & Cepat)
+1. Buka repository Anda di GitHub.
+2. Klik tab **Settings** > menu **Pages** di sebelah kiri.
+3. Pada bagian **Build and deployment**:
+   - **Source**: Pilih `Deploy from a branch`
+   - **Branch**: Pilih `main` (atau `master`)
+   - **Folder**: Pilih `/docs`
+4. Klik **Save**. Web Anda akan langsung aktif dalam hitungan detik!
+
+### METODE 2: Otomatis via GitHub Actions
+Jika Anda memilih opsi **GitHub Actions** pada menu Pages, GitHub Actions akan menjalankan workflow `.github/workflows/deploy.yml` yang otomatis mem-build dari kode sumber.
 
 ---
 *EduCraft AI - Generator RPP Mendalam & Bahan Ajar PAI*

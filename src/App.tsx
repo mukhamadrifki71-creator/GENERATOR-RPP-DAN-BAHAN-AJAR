@@ -92,7 +92,15 @@ export default function App() {
     return MASTER_ATP_PAI_CATALOG;
   });
 
-  const [currentAtp, setCurrentAtp] = useState<MasterAtpRecord>(() => {
+  // Helper to resolve initial ATP consistently across state initializers
+  const getInitialAtp = (): MasterAtpRecord => {
+    const saved = localStorage.getItem('educraft_selected_atp');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.tujuan_pembelajaran) return parsed;
+      } catch {}
+    }
     const cached = localStorage.getItem('educraft_cached_catalog');
     if (cached) {
       try {
@@ -101,7 +109,9 @@ export default function App() {
       } catch {}
     }
     return DEFAULT_INITIAL_ATP;
-  });
+  };
+
+  const [currentAtp, setCurrentAtp] = useState<MasterAtpRecord>(getInitialAtp);
 
   const [options, setOptions] = useState<GenerationOptions>(DEFAULT_INITIAL_OPTIONS);
 
@@ -114,14 +124,41 @@ export default function App() {
   });
   const [supabaseError, setSupabaseError] = useState<string>('');
 
+  // Pre-seed generationResult so the full RPP and teaching material displays immediately and matches initialAtp
+  const [generationResult, setGenerationResult] = useState<GenerationResult>(() => {
+    const initAtp = getInitialAtp();
+    return {
+      rawMarkdown: generateDeterministicRpp(initAtp, DEFAULT_INITIAL_OPTIONS),
+      source: 'engine_fallback',
+      atpData: initAtp,
+      createdAt: 'Siap Ajar',
+    };
+  });
+
+  // Centralized selection handler: updates current ATP, persists to localStorage, and auto-syncs RPP & Bahan Ajar
+  const handleSelectAtp = (atp: MasterAtpRecord, autoSync = true) => {
+    setCurrentAtp(atp);
+    localStorage.setItem('educraft_selected_atp', JSON.stringify(atp));
+    if (autoSync) {
+      const syncdMarkdown = generateDeterministicRpp(atp, options);
+      setGenerationResult({
+        rawMarkdown: syncdMarkdown,
+        source: 'engine_fallback',
+        atpData: atp,
+        createdAt: 'Tersinkron',
+      });
+    }
+  };
+
   const handleDisconnectSupabase = () => {
     localStorage.removeItem('educraft_sb_url');
     localStorage.removeItem('educraft_sb_key');
     localStorage.removeItem('educraft_sb_table');
     localStorage.removeItem('educraft_sb_cp_table');
     localStorage.removeItem('educraft_cached_catalog');
+    localStorage.removeItem('educraft_selected_atp');
     setCatalogItems(MASTER_ATP_PAI_CATALOG);
-    setCurrentAtp(DEFAULT_INITIAL_ATP);
+    handleSelectAtp(DEFAULT_INITIAL_ATP);
     setIsSupabaseConnected(false);
     setSupabaseError('');
   };
@@ -142,14 +179,6 @@ export default function App() {
     setSignatoryConfig(newConfig);
     localStorage.setItem('educraft_signatory_config', JSON.stringify(newConfig));
   };
-
-  // Pre-seed generationResult so the full RPP and teaching material displays immediately
-  const [generationResult, setGenerationResult] = useState<GenerationResult>({
-    rawMarkdown: generateDeterministicRpp(DEFAULT_INITIAL_ATP, DEFAULT_INITIAL_OPTIONS),
-    source: 'engine_fallback',
-    atpData: DEFAULT_INITIAL_ATP,
-    createdAt: 'Siap Ajar',
-  });
 
   const [resultSubTab, setResultSubTab] = useState<'rpp' | 'bahan_ajar' | 'unified' | 'rubric'>('rpp');
   const [copied, setCopied] = useState<boolean>(false);
@@ -427,21 +456,13 @@ export default function App() {
         });
 
         setCatalogItems(mappedRows);
-        setCurrentAtp(mappedRows[0]);
+        handleSelectAtp(mappedRows[0]);
         setIsSupabaseConnected(true);
         localStorage.setItem('educraft_sb_url', url);
         localStorage.setItem('educraft_sb_key', key);
         localStorage.setItem('educraft_sb_table', table);
         if (cpTable) localStorage.setItem('educraft_sb_cp_table', cpTable);
         localStorage.setItem('educraft_cached_catalog', JSON.stringify(mappedRows));
-
-        // Automatically update initial RPP with the first synced Supabase record
-        setGenerationResult({
-          rawMarkdown: generateDeterministicRpp(mappedRows[0], options),
-          source: 'engine_fallback',
-          atpData: mappedRows[0],
-          createdAt: 'Tersinkron Supabase',
-        });
 
         return true;
       } else {
@@ -585,7 +606,7 @@ export default function App() {
             {/* Streamlined Input Station */}
             <AtpInputStation
               currentAtp={currentAtp}
-              setCurrentAtp={setCurrentAtp}
+              setCurrentAtp={handleSelectAtp}
               options={options}
               setOptions={setOptions}
               onGenerate={() => handleGenerate(currentAtp)}
@@ -741,11 +762,11 @@ export default function App() {
             catalogItems={catalogItems}
             isSupabaseConnected={isSupabaseConnected}
             onSelectAtp={(atp) => {
-              setCurrentAtp(atp);
+              handleSelectAtp(atp);
               setActiveNavTab('generator');
             }}
             onGenerateDirect={(atp) => {
-              setCurrentAtp(atp);
+              handleSelectAtp(atp);
               handleGenerate(atp);
             }}
             onOpenConfig={() => {
