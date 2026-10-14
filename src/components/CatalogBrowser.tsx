@@ -84,17 +84,32 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
 
           <div className="flex items-center gap-2">
             {isSupabaseConnected ? (
-              <span className="text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                <span>Terhubung ke Supabase ({catalogItems.length} Materi)</span>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Supabase Aktif ({catalogItems.length} TP)</span>
+                </span>
+                <button
+                  onClick={onOpenConfig}
+                  title="Ubah URL atau Kunci Supabase"
+                  className="text-xs font-medium text-slate-600 hover:text-teal-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer hover:border-teal-300"
+                >
+                  Ubah Kunci
+                </button>
+              </div>
             ) : (
-              <button
-                onClick={onOpenConfig}
-                className="text-xs font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Atur Koneksi Supabase</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <span>Katalog Bawaan ({catalogItems.length} TP)</span>
+                </span>
+                <button
+                  onClick={onOpenConfig}
+                  className="text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Hubungkan Supabase</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -190,7 +205,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                   <span>📚 Total: {catalogItems.length} TP</span>
                   {catalogItems.length >= 80 && (
                     <span className="text-[10px] bg-teal-100 text-teal-800 font-semibold px-1.5 py-0.5 rounded">
-                      ✓ 80+ Lengkap
+                      ✓ Lengkap Kelas 1-6 SD
                     </span>
                   )}
                 </span>
@@ -287,7 +302,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
                   title="Muat ulang seluruh Tujuan Pembelajaran resmi Kurikulum Merdeka PAI SD (Fase A, B, C)"
                   className="text-[11px] font-semibold text-teal-800 bg-white border border-teal-300 hover:bg-teal-50 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer"
                 >
-                  <span>⚡ Muat Master Lengkap (98 TP)</span>
+                  <span>⚡ Muat Master Lengkap (120 TP)</span>
                 </button>
               )}
             </div>

@@ -70,10 +70,10 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
 
   // Supabase credentials state - loaded directly from persistent localStorage
   const [showConfig, setShowConfig] = useState<boolean>(() => {
-    // Keep config hidden if credentials already exist
-    const hasKey = !!localStorage.getItem('educraft_sb_key');
-    const hasCached = !!localStorage.getItem('educraft_cached_catalog');
-    return !(hasKey || hasCached);
+    // Keep config hidden ONLY if valid Supabase credentials already exist
+    const hasKey = !!(localStorage.getItem('educraft_sb_key') || '').trim();
+    const hasUrl = !!(localStorage.getItem('educraft_sb_url') || '').trim();
+    return !(hasKey && hasUrl);
   });
   const [sbUrl, setSbUrl] = useState<string>(() => localStorage.getItem('educraft_sb_url') || '');
   const [sbKey, setSbKey] = useState<string>(() => localStorage.getItem('educraft_sb_key') || '');
@@ -621,7 +621,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                     <span>📚 Total: {catalogItems.length} TP</span>
                     {catalogItems.length >= 80 && (
                       <span className="text-[10px] bg-teal-100 text-teal-800 font-semibold px-1.5 py-0.5 rounded">
-                        ✓ 80+ Lengkap
+                        ✓ Lengkap Kelas 1-6 SD
                       </span>
                     )}
                   </span>
@@ -718,7 +718,7 @@ export const AtpInputStation: React.FC<AtpInputStationProps> = ({
                     title="Muat ulang seluruh Tujuan Pembelajaran resmi Kurikulum Merdeka PAI SD (Fase A, B, C)"
                     className="text-[11px] font-semibold text-teal-800 bg-white border border-teal-300 hover:bg-teal-50 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer"
                   >
-                    <span>⚡ Muat Master Lengkap (98 TP)</span>
+                    <span>⚡ Muat Master Lengkap (120 TP)</span>
                   </button>
                 )}
               </div>

@@ -68,6 +68,7 @@ export default function App() {
 
   // Load cached Supabase items if user already synced earlier, ensuring 80+ records and Kelas III & IV presence
   const [catalogItems, setCatalogItems] = useState<MasterAtpRecord[]>(() => {
+    const hasLiveSupabase = !!(localStorage.getItem('educraft_sb_key') || '').trim();
     const cached = localStorage.getItem('educraft_cached_catalog');
     if (cached) {
       try {
@@ -81,7 +82,21 @@ export default function App() {
         const hasOldFaseD =
           Array.isArray(parsed) &&
           parsed.some((p) => p.fase === 'Fase D' || p.target_kelas?.includes('VII'));
-        if (Array.isArray(parsed) && parsed.length >= 80 && hasKelas3 && hasKelas4 && !hasOldFaseD) {
+
+        // If user is connected to a live Supabase project, honor their customized database rows
+        if (hasLiveSupabase && Array.isArray(parsed) && parsed.length > 0 && !hasOldFaseD) {
+          return parsed;
+        }
+
+        // If using standard offline catalog, auto-upgrade to 120 TP if cached data is outdated (< 120 TP)
+        if (
+          !hasLiveSupabase &&
+          Array.isArray(parsed) &&
+          parsed.length >= MASTER_ATP_PAI_CATALOG.length &&
+          hasKelas3 &&
+          hasKelas4 &&
+          !hasOldFaseD
+        ) {
           return parsed;
         }
       } catch {}
@@ -92,7 +107,7 @@ export default function App() {
     return MASTER_ATP_PAI_CATALOG;
   });
 
-  // Centralized reset/restore to the complete authentic master catalog (98 TP)
+  // Centralized reset/restore to the complete authentic master catalog (120 TP)
   const handleRestoreMasterCatalog = () => {
     setCatalogItems(MASTER_ATP_PAI_CATALOG);
     localStorage.setItem('educraft_cached_catalog', JSON.stringify(MASTER_ATP_PAI_CATALOG));
@@ -127,9 +142,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  // Supabase live integration state (persisted across page reloads and browser sessions)
+  // Supabase live integration state (ONLY true if valid URL and Key are saved)
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(() => {
-    return !!(localStorage.getItem('educraft_sb_key') || localStorage.getItem('educraft_cached_catalog'));
+    const hasKey = !!(localStorage.getItem('educraft_sb_key') || '').trim();
+    const hasUrl = !!(localStorage.getItem('educraft_sb_url') || '').trim();
+    return hasKey && hasUrl;
   });
   const [supabaseError, setSupabaseError] = useState<string>('');
   const [discoveredTables, setDiscoveredTables] = useState<string[]>([]);
@@ -445,6 +462,18 @@ export default function App() {
       return false;
     }
   };
+
+  // Auto-sync with live Supabase on mount if user previously configured credentials
+  useEffect(() => {
+    const savedUrl = (localStorage.getItem('educraft_sb_url') || '').trim();
+    const savedKey = (localStorage.getItem('educraft_sb_key') || '').trim();
+    const savedTable = (localStorage.getItem('educraft_sb_table') || 'master_atp_pai').trim();
+    const savedCpTable = (localStorage.getItem('educraft_sb_cp_table') || 'master_cp_pai').trim();
+
+    if (savedUrl && savedKey) {
+      handleRefreshSupabase(savedUrl, savedKey, savedTable, savedCpTable).catch(() => {});
+    }
+  }, []);
 
   // Trigger generation function via server API with fallback
   const handleGenerate = async (atpToUse = currentAtp) => {
