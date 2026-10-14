@@ -4,18 +4,28 @@
     <meta charset="utf-8">
     <title>EduCraft AI</title>
     <script type="text/javascript">
-      // Safe redirect to repository base path
-      var segments = window.location.pathname.split('/').filter(Boolean);
-      // If deployed at https://username.github.io/repo-name/
-      if (segments.length > 0) {
-        window.location.replace('/' + segments[0] + '/');
-      } else {
-        window.location.replace('/');
-      }
+      (function() {
+        var path = window.location.pathname;
+        var hostname = window.location.hostname;
+        var isGithubIo = hostname.endsWith('github.io');
+        var segments = path.split('/').filter(Boolean);
+        
+        var target = '/';
+        // If deployed at https://username.github.io/repo-name/
+        if (isGithubIo && segments.length > 0 && !hostname.startsWith(segments[0] + '.')) {
+          target = '/' + segments[0] + '/';
+        }
+        
+        // Prevent redirecting to self which causes ERR_TOO_MANY_REDIRECTS
+        if (path !== target && path !== target.slice(0, -1)) {
+          window.location.replace(target + window.location.search + window.location.hash);
+        }
+      })();
     </script>
   </head>
-  <body style="font-family: system-ui, -apple-system, sans-serif; text-align: center; padding-top: 60px; color: #1e293b;">
-    <h2 style="font-size: 20px; font-weight: 700;">EduCraft AI</h2>
-    <p style="color: #64748b; font-size: 14px;">Mengalihkan ke halaman utama aplikasi...</p>
+  <body style="font-family: system-ui, -apple-system, sans-serif; text-align: center; padding-top: 60px; color: #1e293b; background-color: #f8fafc;">
+    <h2 style="font-size: 20px; font-weight: 700; color: #0f172a;">EduCraft AI</h2>
+    <p style="color: #64748b; font-size: 14px;">Memuat halaman aplikasi...</p>
+    <a href="./" style="display: inline-block; margin-top: 12px; padding: 8px 16px; background-color: #0284c7; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 13px; font-weight: 600;">Buka Beranda EduCraft AI</a>
   </body>
 </html>

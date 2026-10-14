@@ -7,7 +7,16 @@ export default defineConfig(() => {
   return {
     // Relative base './' works universally on GitHub Pages (any repo name) and local dev
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'strip-gh-redirect-from-dist',
+        transformIndexHtml(html: string) {
+          return html.replace(/<!-- GH_PAGES_FALLBACK_START -->[\s\S]*?<!-- GH_PAGES_FALLBACK_END -->/g, '');
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -22,3 +31,4 @@ export default defineConfig(() => {
     },
   };
 });
+

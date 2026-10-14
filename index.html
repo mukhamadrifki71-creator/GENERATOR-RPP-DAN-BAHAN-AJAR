@@ -12,12 +12,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+    <!-- GH_PAGES_FALLBACK_START -->
     <script>
-      // Only redirect if this is the uncompiled root index.html on GitHub Pages
-      if (window.location.hostname.includes('github.io') && !document.querySelector('script[src*="assets/"]') && !window.location.pathname.includes('/docs')) {
-        window.location.replace('./docs/' + window.location.search + window.location.hash);
+      // Fallback: ONLY triggered if the uncompiled root index.html is served on GitHub Pages
+      if (window.location.hostname.includes('github.io') && !window.location.pathname.includes('/docs/')) {
+        window.addEventListener('error', function(e) {
+          if (e && e.filename && e.filename.includes('main.tsx')) {
+            window.location.replace('./docs/' + window.location.search + window.location.hash);
+          }
+        }, true);
       }
     </script>
+    <!-- GH_PAGES_FALLBACK_END -->
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased font-sans">
     <div id="root"></div>
